@@ -129,25 +129,22 @@ fun NyxPlayApp(viewModel: LibraryViewModel = viewModel()) {
 
 @Composable
 private fun VideosSection(hasPermission: Boolean, videos: List<MediaEntity>) {
+    var feedStartIndex by remember { mutableStateOf<Int?>(null) }
+
     when {
         !hasPermission -> CenteredMessage("A aguardar permissão de acesso aos vídeos…")
         videos.isEmpty() -> CenteredMessage("A indexar vídeos do dispositivo…", showSpinner = true)
+        feedStartIndex != null -> com.jay.nyxplay.ui.video.VideoFeedScreen(
+            videos = videos,
+            startIndex = feedStartIndex!!,
+            onBack = { feedStartIndex = null }
+        )
         else -> Column(modifier = Modifier.fillMaxSize()) {
             SectionHeader(title = "Vídeos", subtitle = "${videos.size} vídeos — Todos os vídeos")
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                contentPadding = PaddingValues(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(videos, key = { it.uid }) { video ->
-                    MediaThumbnail(
-                        uri = video.uri,
-                        type = MediaType.VIDEO,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(0.75f)
-                    )
-                }
-            }
+            com.jay.nyxplay.ui.video.VideoGridScreen(
+                videos = videos,
+                onVideoClick = { index -> feedStartIndex = index }
+            )
         }
     }
 }
