@@ -31,6 +31,26 @@ import kotlinx.coroutines.withContext
  * - Áudio: capa de álbum embutida no ficheiro (ID3/metadata), se existir.
  *   Sem capa embutida, mostra só o fundo — não inventamos capa de terceiros.
  */
+/**
+ * Decodifica um array de bytes de imagem já reduzido a ~targetSize px,
+ * evitando alocar bitmaps de capas de álbum em resolução total
+ * (algumas vêm a 1000px+, o que pressiona memória sem necessidade
+ * numa thumbnail de 56–160dp).
+ */
+private fun decodeSampledBitmap(bytes: ByteArray, targetSize: Int): Bitmap? {
+    val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, boundsOptions)
+
+    var sampleSize = 1
+    val largestDimension = maxOf(boundsOptions.outWidth, boundsOptions.outHeight)
+    while (largestDimension / sampleSize > targetSize * 2) {
+        sampleSize *= 2
+    }
+
+    val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
+}
+
 @Composable
 fun MediaThumbnail(uri: String, type: MediaType, modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -59,7 +79,7 @@ fun MediaThumbnail(uri: String, type: MediaType, modifier: Modifier = Modifier) 
                         try {
                             retriever.setDataSource(context, parsedUri)
                             val art = retriever.embeddedPicture
-                            art?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                            art?.let { decodeSampledBitmap(it, targetSize = 160) }
                         } finally {
                             retriever.release()
                         }

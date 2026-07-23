@@ -75,23 +75,23 @@ fun NyxPlayApp(viewModel: LibraryViewModel = viewModel()) {
     val videos by viewModel.videos.collectAsState()
     val audios by viewModel.audios.collectAsState()
 
-    val videoPermLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasVideoPermission = granted
-        if (granted) viewModel.scanVideos()
-    }
-
-    val audioPermLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasAudioPermission = granted
-        if (granted) viewModel.scanAudio()
+    // Um único pedido atómico para as duas permissões — pedir permissões
+    // separadas em launchers concorrentes causa condição de corrida no
+    // Android (só um pedido pode estar ativo de cada vez), levando a
+    // comportamento inconsistente e, em alguns aparelhos, a crash.
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val videoGranted = results[videoPermission] == true
+        val audioGranted = results[audioPermission] == true
+        hasVideoPermission = videoGranted
+        hasAudioPermission = audioGranted
+        if (videoGranted) viewModel.scanVideos()
+        if (audioGranted) viewModel.scanAudio()
     }
 
     LaunchedEffect(Unit) {
-        videoPermLauncher.launch(videoPermission)
-        audioPermLauncher.launch(audioPermission)
+        permissionsLauncher.launch(arrayOf(videoPermission, audioPermission))
     }
 
     Scaffold(
