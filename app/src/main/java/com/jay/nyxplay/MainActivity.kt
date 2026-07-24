@@ -151,43 +151,22 @@ private fun VideosSection(hasPermission: Boolean, videos: List<MediaEntity>) {
 
 @Composable
 private fun MusicaSection(hasPermission: Boolean, audios: List<MediaEntity>) {
+    var playerStartIndex by remember { mutableStateOf<Int?>(null) }
+
     when {
         !hasPermission -> CenteredMessage("A aguardar permissão de acesso à música…")
         audios.isEmpty() -> CenteredMessage("A indexar música do dispositivo…", showSpinner = true)
+        playerStartIndex != null -> com.jay.nyxplay.ui.music.MusicPlayerScreen(
+            audios = audios,
+            startIndex = playerStartIndex!!,
+            onBack = { playerStartIndex = null }
+        )
         else -> Column(modifier = Modifier.fillMaxSize()) {
             SectionHeader(title = "Música", subtitle = "${audios.size} músicas — Todas as músicas")
-            LazyColumn {
-                items(audios, key = { it.uid }) { audio ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        MediaThumbnail(
-                            uri = audio.uri,
-                            type = MediaType.AUDIO,
-                            modifier = Modifier.size(56.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                audio.displayName,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
-                            Text(
-                                audio.artist ?: "Artista desconhecido",
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                                fontSize = 13.sp,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-            }
+            com.jay.nyxplay.ui.music.MusicLibraryScreen(
+                audios = audios,
+                onSongClick = { index -> playerStartIndex = index }
+            )
         }
     }
 }
