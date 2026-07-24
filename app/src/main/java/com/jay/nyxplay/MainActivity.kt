@@ -151,22 +151,39 @@ private fun VideosSection(hasPermission: Boolean, videos: List<MediaEntity>) {
 
 @Composable
 private fun MusicaSection(hasPermission: Boolean, audios: List<MediaEntity>) {
-    var playerStartIndex by remember { mutableStateOf<Int?>(null) }
+    val playerViewModel: com.jay.nyxplay.ui.music.MusicPlayerViewModel = viewModel()
+    val playerUi by playerViewModel.state.collectAsState()
+    var showFullPlayer by remember { mutableStateOf(false) }
 
     when {
         !hasPermission -> CenteredMessage("A aguardar permissão de acesso à música…")
         audios.isEmpty() -> CenteredMessage("A indexar música do dispositivo…", showSpinner = true)
-        playerStartIndex != null -> com.jay.nyxplay.ui.music.MusicPlayerScreen(
-            audios = audios,
-            startIndex = playerStartIndex!!,
-            onBack = { playerStartIndex = null }
+        showFullPlayer && playerUi.isActive -> com.jay.nyxplay.ui.music.MusicPlayerScreen(
+            viewModel = playerViewModel,
+            onBack = { showFullPlayer = false }
         )
         else -> Column(modifier = Modifier.fillMaxSize()) {
             SectionHeader(title = "Música", subtitle = "${audios.size} músicas — Todas as músicas")
             com.jay.nyxplay.ui.music.MusicLibraryScreen(
                 audios = audios,
-                onSongClick = { index -> playerStartIndex = index }
+                modifier = Modifier.weight(1f),
+                onSongClick = { index ->
+                    playerViewModel.playQueue(audios, index)
+                    showFullPlayer = true
+                },
+                onShufflePlay = {
+                    playerViewModel.playQueue(audios.shuffled(), 0)
+                    showFullPlayer = true
+                }
             )
+            if (playerUi.isActive) {
+                com.jay.nyxplay.ui.music.MiniPlayerBar(
+                    ui = playerUi,
+                    onOpenPlayer = { showFullPlayer = true },
+                    onTogglePlayPause = playerViewModel::togglePlayPause,
+                    onNext = playerViewModel::next
+                )
+            }
         }
     }
 }
