@@ -21,7 +21,8 @@ class MediaScanner(private val context: Context) {
             MediaStore.Video.Media.DISPLAY_NAME,
             MediaStore.Video.Media.DATE_ADDED,
             MediaStore.Video.Media.DURATION,
-            MediaStore.Video.Media.SIZE
+            MediaStore.Video.Media.SIZE,
+            MediaStore.Video.Media.BUCKET_DISPLAY_NAME
         )
 
         context.contentResolver.query(
@@ -34,6 +35,7 @@ class MediaScanner(private val context: Context) {
             val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
             val durCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
             val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+            val bucketCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
@@ -46,7 +48,8 @@ class MediaScanner(private val context: Context) {
                     displayName = cursor.getString(nameCol) ?: "Sem nome",
                     dateAdded = cursor.getLong(dateCol),
                     durationMs = cursor.getLong(durCol),
-                    sizeBytes = cursor.getLong(sizeCol)
+                    sizeBytes = cursor.getLong(sizeCol),
+                    bucketName = cursor.getString(bucketCol)
                 )
             }
         }

@@ -22,7 +22,8 @@ data class MediaEntity(
     val durationMs: Long,
     val sizeBytes: Long,
     val artist: String? = null,
-    val album: String? = null
+    val album: String? = null,
+    val bucketName: String? = null
 )
 
 fun buildMediaUid(type: MediaType, mediaStoreId: Long) = "${type.name}:$mediaStoreId"

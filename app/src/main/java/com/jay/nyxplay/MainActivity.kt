@@ -129,21 +129,30 @@ fun NyxPlayApp(viewModel: LibraryViewModel = viewModel()) {
 
 @Composable
 private fun VideosSection(hasPermission: Boolean, videos: List<MediaEntity>) {
+    var selectedCatalog by remember { mutableStateOf<com.jay.nyxplay.ui.video.VideoCatalog?>(null) }
     var feedStartIndex by remember { mutableStateOf<Int?>(null) }
 
     when {
         !hasPermission -> CenteredMessage("A aguardar permissão de acesso aos vídeos…")
         videos.isEmpty() -> CenteredMessage("A indexar vídeos do dispositivo…", showSpinner = true)
-        feedStartIndex != null -> com.jay.nyxplay.ui.video.VideoFeedScreen(
-            videos = videos,
+
+        selectedCatalog != null && feedStartIndex != null -> com.jay.nyxplay.ui.video.VideoFeedScreen(
+            videos = selectedCatalog!!.videos,
             startIndex = feedStartIndex!!,
             onBack = { feedStartIndex = null }
         )
+
+        selectedCatalog != null -> com.jay.nyxplay.ui.video.Video3DGalleryScreen(
+            catalog = selectedCatalog!!,
+            onBack = { selectedCatalog = null },
+            onOpenFeed = { index -> feedStartIndex = index }
+        )
+
         else -> Column(modifier = Modifier.fillMaxSize()) {
-            SectionHeader(title = "Vídeos", subtitle = "${videos.size} vídeos — Todos os vídeos")
-            com.jay.nyxplay.ui.video.VideoGridScreen(
+            SectionHeader(title = "Vídeos", subtitle = "${videos.size} vídeos — catálogos por origem")
+            com.jay.nyxplay.ui.video.VideoCatalogScreen(
                 videos = videos,
-                onVideoClick = { index -> feedStartIndex = index }
+                onCatalogClick = { catalog -> selectedCatalog = catalog }
             )
         }
     }
