@@ -1,5 +1,6 @@
 package com.jay.nyxplay.ui.video
 
+import android.app.Activity
 import android.content.Context
 import android.media.AudioManager
 import android.net.Uri
@@ -10,15 +11,24 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -31,11 +41,10 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -49,19 +58,27 @@ import com.jay.nyxplay.data.MediaEntity
 import com.jay.nyxplay.data.MediaType
 import com.jay.nyxplay.ui.MediaThumbnail
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
- * Feed vertical estilo TikTok, com gestos reais:
- * - Duplo-toque esquerda/direita: recua/avança 10s
- * - Arrastar vertical (metade direita): volume real do aparelho
- * - Arrastar horizontal: scrub com prévia do tempo
- * - Pinça: zoom no vídeo
- * - Toque único: mostrar/esconder controlos (auto-esconde em 3s)
+ * Feed vertical estilo TikTok — o swipe de trocar vídeo é sempre o
+ * comportamento nativo do Pager, nunca interceptado por gestos custom.
+ *
+ * Gestos (convenção real do VLC, confirmada por documentação):
+ * - Faixa esquerda (15%): arrastar vertical = brilho
+ * - Faixa direita (15%): arrastar vertical = volume
+ * - Centro (70%): só toque/duplo-toque — nunca captura arrasto,
+ *   por isso nunca compete com o swipe de página
+ *
+ * Botões sempre visíveis: recuar 10s, vídeo anterior, play/pause,
+ * próximo vídeo, avançar 10s.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoFeedScreen(videos: List<MediaEntity>, startIndex: Int, onBack: () -> Unit) {
     val context = LocalContext.current
+    val activity = context as? Activity
+    val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = startIndex) { videos.size }
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
@@ -72,14 +89,23 @@ fun VideoFeedScreen(videos: List<MediaEntity>, startIndex: Int, onBack: () -> Un
         }
     }
 
-    var showControls by remember { mutableStateOf(true) }
-    var videoScale by remember { mutableFloatStateOf(1f) }
-    var seekFeedback by remember { mutableStateOf<String?>(null) }
+    var showTopBar by remember { mutableStateOf(true) }
+    var isPlaying by remember { mutableStateOf(true) }
+    var brightness by remember { mutableFloatStateOf(0.5f) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
 
-    DisposableEffect(Unit) {
-        onDispose { exoPlayer.release() }
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose {
+            exoPlayer.removeListener(listener)
+            exoPlayer.release()
+        }
     }
 
     LaunchedEffect(pagerState.settledPage) {
@@ -87,10 +113,8 @@ fun VideoFeedScreen(videos: List<MediaEntity>, startIndex: Int, onBack: () -> Un
         exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(video.uri)))
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
-        videoScale = 1f
     }
 
-    // Posição/duração para a barra de progresso
     LaunchedEffect(pagerState.settledPage) {
         while (true) {
             positionMs = exoPlayer.currentPosition
@@ -99,20 +123,16 @@ fun VideoFeedScreen(videos: List<MediaEntity>, startIndex: Int, onBack: () -> Un
         }
     }
 
-    // Auto-esconder controlos 3s depois de aparecerem
-    LaunchedEffect(showControls) {
-        if (showControls) {
+    LaunchedEffect(showTopBar) {
+        if (showTopBar) {
             delay(3000)
-            showControls = false
+            showTopBar = false
         }
     }
 
-    // Apagar feedback de seek (+10s/-10s) passado um instante
-    LaunchedEffect(seekFeedback) {
-        if (seekFeedback != null) {
-            delay(600)
-            seekFeedback = null
-        }
+    fun seekBy(deltaMs: Long) {
+        val target = (exoPlayer.currentPosition + deltaMs).coerceIn(0, exoPlayer.duration.coerceAtLeast(0))
+        exoPlayer.seekTo(target)
     }
 
     BackHandler(onBack = onBack)
@@ -120,8 +140,7 @@ fun VideoFeedScreen(videos: List<MediaEntity>, startIndex: Int, onBack: () -> Un
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         VerticalPager(
             state = pagerState,
-            modifier = Modifier.fillMaxSize(),
-            userScrollEnabled = videoScale <= 1.05f // não competir com o pinch-zoom em curso
+            modifier = Modifier.fillMaxSize()
         ) { page ->
             if (page == pagerState.settledPage) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -132,47 +151,57 @@ fun VideoFeedScreen(videos: List<MediaEntity>, startIndex: Int, onBack: () -> Un
                                 useController = false
                             }
                         },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { scaleX = videoScale; scaleY = videoScale }
+                        modifier = Modifier.fillMaxSize()
                     )
 
-                    // Camada de gestos — separada do PlayerView para não interferir
-                    // com a superfície de vídeo nativa
+                    // Centro — só toque, NUNCA arrasto, para não competir
+                    // com o swipe vertical de trocar de vídeo do Pager.
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .fillMaxHeight()
+                            .fillMaxWidth(0.7f)
+                            .align(androidx.compose.ui.Alignment.Center)
                             .pointerInput(Unit) {
-                                detectTransformGestures { _, pan, zoom, _ ->
-                                    if (zoom != 1f) {
-                                        videoScale = (videoScale * zoom).coerceIn(1f, 3f)
-                                    } else if (kotlin.math.abs(pan.x) > kotlin.math.abs(pan.y)) {
-                                        val deltaMs = (pan.x * 40).toLong()
-                                        val target = (exoPlayer.currentPosition + deltaMs)
-                                            .coerceIn(0, exoPlayer.duration.coerceAtLeast(0))
-                                        exoPlayer.seekTo(target)
-                                        showControls = true
-                                    } else {
-                                        val deltaVolume = -pan.y / 600f
-                                        val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                                        val newLevel = (current + deltaVolume * maxVolume)
-                                            .toInt().coerceIn(0, maxVolume)
-                                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newLevel, 0)
+                                detectTapGestures(
+                                    onTap = { showTopBar = !showTopBar },
+                                    onDoubleTap = { offset ->
+                                        if (offset.x < size.width / 2) seekBy(-10_000L) else seekBy(10_000L)
+                                    }
+                                )
+                            }
+                    )
+
+                    // Faixa esquerda — brilho
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(60.dp)
+                            .align(androidx.compose.ui.Alignment.CenterStart)
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures { _, dragAmount ->
+                                    brightness = (brightness - dragAmount / 800f).coerceIn(0.02f, 1f)
+                                    activity?.let { act ->
+                                        val params = act.window.attributes
+                                        params.screenBrightness = brightness
+                                        act.window.attributes = params
                                     }
                                 }
                             }
+                    )
+
+                    // Faixa direita — volume
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(60.dp)
+                            .align(androidx.compose.ui.Alignment.CenterEnd)
                             .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onTap = { showControls = !showControls },
-                                    onDoubleTap = { offset ->
-                                        val isLeftSide = offset.x < size.width / 2
-                                        val deltaMs = if (isLeftSide) -10_000L else 10_000L
-                                        val target = (exoPlayer.currentPosition + deltaMs)
-                                            .coerceIn(0, exoPlayer.duration.coerceAtLeast(0))
-                                        exoPlayer.seekTo(target)
-                                        seekFeedback = if (isLeftSide) "-10s" else "+10s"
-                                    }
-                                )
+                                detectVerticalDragGestures { _, dragAmount ->
+                                    val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                    val delta = -dragAmount / 800f * maxVolume
+                                    val newLevel = (current + delta).toInt().coerceIn(0, maxVolume)
+                                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newLevel, 0)
+                                }
                             }
                     )
                 }
@@ -185,17 +214,10 @@ fun VideoFeedScreen(videos: List<MediaEntity>, startIndex: Int, onBack: () -> Un
             }
         }
 
-        seekFeedback?.let {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(it, color = Color.White, fontSize = 28.sp)
-            }
-        }
-
         AnimatedVisibility(
-            visible = showControls,
+            visible = showTopBar,
             enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.TopStart).fillMaxWidth()
+            exit = fadeOut()
         ) {
             Box {
                 IconButton(onClick = onBack, modifier = Modifier.padding(16.dp)) {
@@ -204,23 +226,56 @@ fun VideoFeedScreen(videos: List<MediaEntity>, startIndex: Int, onBack: () -> Un
             }
         }
 
-        AnimatedVisibility(
-            visible = showControls,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(16.dp)
+        // Barra de progresso + nome — sempre visível, discreta
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier
+                .align(androidx.compose.ui.Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            androidx.compose.foundation.layout.Column {
-                videos.getOrNull(pagerState.currentPage)?.let { video ->
-                    Text(video.displayName, color = Color.White)
+            videos.getOrNull(pagerState.currentPage)?.let { video ->
+                Text(video.displayName, color = Color.White, fontSize = 13.sp)
+            }
+            if (durationMs > 0) {
+                LinearProgressIndicator(
+                    progress = { (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    color = Color.White,
+                    trackColor = Color.White.copy(alpha = 0.3f)
+                )
+            }
+
+            // Botões sempre visíveis, como pedido
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly
+            ) {
+                IconButton(onClick = {
+                    scope.launch {
+                        if (pagerState.currentPage > 0) pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                    }
+                }) {
+                    Icon(Icons.Default.SkipPrevious, contentDescription = "Vídeo anterior", tint = Color.White)
                 }
-                if (durationMs > 0) {
-                    LinearProgressIndicator(
-                        progress = { (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        color = Color.White,
-                        trackColor = Color.White.copy(alpha = 0.3f)
+                IconButton(onClick = { seekBy(-10_000L) }) {
+                    Icon(Icons.Default.Replay10, contentDescription = "Recuar 10s", tint = Color.White)
+                }
+                IconButton(onClick = { if (isPlaying) exoPlayer.pause() else exoPlayer.play() }) {
+                    Icon(
+                        if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pausar" else "Reproduzir",
+                        tint = Color.White
                     )
+                }
+                IconButton(onClick = { seekBy(10_000L) }) {
+                    Icon(Icons.Default.Forward10, contentDescription = "Avançar 10s", tint = Color.White)
+                }
+                IconButton(onClick = {
+                    scope.launch {
+                        if (pagerState.currentPage < videos.lastIndex) pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                    }
+                }) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Próximo vídeo", tint = Color.White)
                 }
             }
         }
