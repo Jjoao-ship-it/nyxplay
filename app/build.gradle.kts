@@ -62,4 +62,5 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
     implementation("androidx.palette:palette:1.0.0")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
 }

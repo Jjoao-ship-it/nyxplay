@@ -19,10 +19,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import com.jay.nyxplay.data.MediaEntity
 import com.jay.nyxplay.data.MediaType
 import com.jay.nyxplay.ui.MediaThumbnail
+import com.jay.nyxplay.ui.playlists.AddToPlaylistDialog
 
 @Composable
 fun MusicLibraryScreen(
@@ -68,6 +71,12 @@ fun MusicLibraryScreen(
             .entries.sortedByDescending { it.value }
             .take(8)
     }
+
+    val recentlyAdded = remember(audios) {
+        audios.sortedByDescending { it.dateAdded }.take(10)
+    }
+
+    var addToPlaylistUid by remember { mutableStateOf<String?>(null) }
 
     val filtered = remember(audios, query, artistFilter, albumFilter) {
         audios.filter { a ->
@@ -120,6 +129,33 @@ fun MusicLibraryScreen(
         }
 
         if (artistFilter == null && albumFilter == null && query.isBlank()) {
+            if (recentlyAdded.isNotEmpty()) {
+                item { SectionLabel("Recentemente adicionadas") }
+                item {
+                    LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)) {
+                        items(recentlyAdded, key = { it.uid }) { audio ->
+                            Column(
+                                modifier = Modifier
+                                    .padding(end = 14.dp)
+                                    .clickable { onSongClick(audios.indexOf(audio)) }
+                            ) {
+                                MediaThumbnail(
+                                    uri = audio.uri,
+                                    type = MediaType.AUDIO,
+                                    modifier = Modifier.size(96.dp).clip(RoundedCornerShape(10.dp))
+                                )
+                                Text(
+                                    audio.displayName,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    modifier = Modifier.width(96.dp).padding(top = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             if (topArtists.isNotEmpty()) {
                 item { SectionLabel("Top artistas") }
                 item {
@@ -211,8 +247,19 @@ fun MusicLibraryScreen(
                         maxLines = 1
                     )
                 }
+                IconButton(onClick = { addToPlaylistUid = audio.uid }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Mais opções")
+                }
             }
         }
+    }
+
+    addToPlaylistUid?.let { uid ->
+        AddToPlaylistDialog(
+            type = MediaType.AUDIO,
+            mediaUid = uid,
+            onDismiss = { addToPlaylistUid = null }
+        )
     }
 }
 

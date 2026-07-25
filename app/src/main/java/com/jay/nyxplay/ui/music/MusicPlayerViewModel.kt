@@ -71,6 +71,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         loadCurrent()
     }
 
+    fun playAtIndex(index: Int) {
+        if (index !in _state.value.queue.indices) return
+        _state.update { it.copy(currentIndex = index) }
+        loadCurrent()
+    }
+
+    fun removeFromQueue(uid: String) {
+        val s = _state.value
+        val removingCurrent = s.queue.getOrNull(s.currentIndex)?.uid == uid
+        val newQueue = s.queue.filterNot { it.uid == uid }
+        val newIndex = when {
+            newQueue.isEmpty() -> 0
+            removingCurrent -> s.currentIndex.coerceIn(0, newQueue.lastIndex)
+            else -> newQueue.indexOfFirst { it.uid == s.currentSong?.uid }.coerceAtLeast(0)
+        }
+        _state.update { it.copy(queue = newQueue, currentIndex = newIndex) }
+        if (removingCurrent && newQueue.isNotEmpty()) loadCurrent()
+    }
+
     fun togglePlayPause() {
         if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
     }

@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,9 +26,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jay.nyxplay.data.MediaEntity
 import com.jay.nyxplay.data.MediaType
 import com.jay.nyxplay.ui.MediaThumbnail
+import com.jay.nyxplay.ui.settings.SettingsViewModel
 import kotlin.math.abs
 
 data class VideoCatalog(
@@ -40,12 +44,19 @@ data class VideoCatalog(
  * Grid em cascata desalinhada, estilo "mesa de fotos espalhadas" —
  * cada cartão com leve rotação e altura variável, deterministicamente
  * derivadas do nome (mesma disposição sempre, sem recalcular ao
- * recompor).
+ * recompor). Respeita as pastas excluídas definidas em Configurações.
  */
 @Composable
-fun VideoCatalogScreen(videos: List<MediaEntity>, onCatalogClick: (VideoCatalog) -> Unit) {
-    val catalogs = remember(videos) {
+fun VideoCatalogScreen(
+    videos: List<MediaEntity>,
+    onCatalogClick: (VideoCatalog) -> Unit,
+    settingsViewModel: SettingsViewModel = viewModel()
+) {
+    val excludedBuckets by settingsViewModel.excludedBuckets.collectAsState()
+
+    val catalogs = remember(videos, excludedBuckets) {
         videos
+            .filter { (it.bucketName ?: "Outros vídeos") !in excludedBuckets }
             .groupBy { it.bucketName?.takeIf { name -> name.isNotBlank() } ?: "Outros vídeos" }
             .map { (name, list) -> VideoCatalog(name, list) }
             .sortedByDescending { it.videos.size }

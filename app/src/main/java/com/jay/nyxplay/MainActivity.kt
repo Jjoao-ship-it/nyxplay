@@ -8,14 +8,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,14 +23,15 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jay.nyxplay.data.MediaEntity
 import com.jay.nyxplay.data.MediaType
+import com.jay.nyxplay.data.PlaylistEntity
 import com.jay.nyxplay.ui.LibraryViewModel
-import com.jay.nyxplay.ui.MediaThumbnail
+import com.jay.nyxplay.ui.music.MusicPlayerScreen
+import com.jay.nyxplay.ui.music.MusicPlayerViewModel
+import com.jay.nyxplay.ui.playlists.PlaylistDetailScreen
+import com.jay.nyxplay.ui.playlists.PlaylistManagerScreen
+import com.jay.nyxplay.ui.settings.SettingsScreen
+import com.jay.nyxplay.ui.video.VideoFeedScreen
 
-/**
- * Fase 1 (revista) — media-scanner para DOIS centros de media: vídeo e áudio,
- * como duas secções separadas no mesmo app (bottom navigation), cada uma
- * com a sua própria playlist automática internamente.
- */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,6 +55,16 @@ fun NyxPlayTheme(content: @Composable () -> Unit) {
 
 private enum class NyxSection { VIDEOS, MUSICA }
 
+/** Estado de navegação global — Settings e Playlists são partilhados
+ * entre Vídeo e Música, por isso vivem acima das secções, não dentro. */
+private sealed class Overlay {
+    object None : Overlay()
+    object Settings : Overlay()
+    data class PlaylistManager(val type: MediaType) : Overlay()
+    data class PlaylistDetail(val playlist: PlaylistEntity) : Overlay()
+    data class VideoFeedFromPlaylist(val playlist: PlaylistEntity, val videos: List<MediaEntity>, val startIndex: Int) : Overlay()
+}
+
 private val videoPermission =
     if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_VIDEO
     else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -71,14 +78,15 @@ fun NyxPlayApp(viewModel: LibraryViewModel = viewModel()) {
     var section by remember { mutableStateOf(NyxSection.VIDEOS) }
     var hasVideoPermission by remember { mutableStateOf(false) }
     var hasAudioPermission by remember { mutableStateOf(false) }
+    var overlay by remember { mutableStateOf<Overlay>(Overlay.None) }
 
     val videos by viewModel.videos.collectAsState()
     val audios by viewModel.audios.collectAsState()
 
-    // Um único pedido atómico para as duas permissões — pedir permissões
-    // separadas em launchers concorrentes causa condição de corrida no
-    // Android (só um pedido pode estar ativo de cada vez), levando a
-    // comportamento inconsistente e, em alguns aparelhos, a crash.
+    val playerViewModel: MusicPlayerViewModel = viewModel()
+    val playerUi by playerViewModel.state.collectAsState()
+    var showFullPlayer by remember { mutableStateOf(false) }
+
     val permissionsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
@@ -96,36 +104,81 @@ fun NyxPlayApp(viewModel: LibraryViewModel = viewModel()) {
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    section = if (section == NyxSection.VIDEOS) NyxSection.MUSICA else NyxSection.VIDEOS
-                },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(
-                    if (section == NyxSection.VIDEOS) Icons.Default.MusicNote else Icons.Default.Movie,
-                    contentDescription = "Trocar secção"
-                )
+            if (overlay == Overlay.None && !showFullPlayer) {
+                FloatingActionButton(
+                    onClick = { section = if (section == NyxSection.VIDEOS) NyxSection.MUSICA else NyxSection.VIDEOS },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        if (section == NyxSection.VIDEOS) Icons.Default.MusicNote else Icons.Default.Movie,
+                        contentDescription = "Trocar secção"
+                    )
+                }
             }
         }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            when (section) {
-                NyxSection.VIDEOS -> VideosSection(
-                    hasPermission = hasVideoPermission,
-                    videos = videos
+            when (val ov = overlay) {
+                is Overlay.Settings -> SettingsScreen(
+                    videos = videos,
+                    onBack = { overlay = Overlay.None },
+                    onOpenPlaylists = { overlay = Overlay.PlaylistManager(if (section == NyxSection.VIDEOS) MediaType.VIDEO else MediaType.AUDIO) }
                 )
-                NyxSection.MUSICA -> MusicaSection(
-                    hasPermission = hasAudioPermission,
-                    audios = audios
+                is Overlay.PlaylistManager -> PlaylistManagerScreen(
+                    type = ov.type,
+                    onBack = { overlay = Overlay.Settings },
+                    onOpenPlaylist = { playlist -> overlay = Overlay.PlaylistDetail(playlist) }
                 )
+                is Overlay.PlaylistDetail -> PlaylistDetailScreen(
+                    playlist = ov.playlist,
+                    onBack = { overlay = Overlay.PlaylistManager(ov.playlist.type) },
+                    onItemClick = { media, index ->
+                        if (ov.playlist.type == MediaType.AUDIO) {
+                            playerViewModel.playQueue(media, index)
+                            showFullPlayer = true
+                            overlay = Overlay.None
+                        } else {
+                            overlay = Overlay.VideoFeedFromPlaylist(ov.playlist, media, index)
+                        }
+                    }
+                )
+                is Overlay.VideoFeedFromPlaylist -> VideoFeedScreen(
+                    videos = ov.videos,
+                    startIndex = ov.startIndex,
+                    onBack = { overlay = Overlay.PlaylistDetail(ov.playlist) }
+                )
+                Overlay.None -> {
+                    if (showFullPlayer && playerUi.isActive) {
+                        MusicPlayerScreen(viewModel = playerViewModel, onBack = { showFullPlayer = false })
+                    } else {
+                        when (section) {
+                            NyxSection.VIDEOS -> VideosSection(
+                                hasPermission = hasVideoPermission,
+                                videos = videos,
+                                onSettingsClick = { overlay = Overlay.Settings }
+                            )
+                            NyxSection.MUSICA -> MusicaSection(
+                                hasPermission = hasAudioPermission,
+                                audios = audios,
+                                playerViewModel = playerViewModel,
+                                showFullPlayer = showFullPlayer,
+                                onShowFullPlayerChange = { showFullPlayer = it },
+                                onSettingsClick = { overlay = Overlay.Settings }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun VideosSection(hasPermission: Boolean, videos: List<MediaEntity>) {
+private fun VideosSection(
+    hasPermission: Boolean,
+    videos: List<MediaEntity>,
+    onSettingsClick: () -> Unit
+) {
     var selectedCatalog by remember { mutableStateOf<com.jay.nyxplay.ui.video.VideoCatalog?>(null) }
     var feedStartIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -146,7 +199,7 @@ private fun VideosSection(hasPermission: Boolean, videos: List<MediaEntity>) {
         )
 
         else -> Column(modifier = Modifier.fillMaxSize()) {
-            SectionHeader(title = "Vídeos", subtitle = "${videos.size} vídeos — catálogos por origem")
+            SectionHeader(title = "Vídeos", subtitle = "${videos.size} vídeos — catálogos por origem", onSettingsClick = onSettingsClick)
             com.jay.nyxplay.ui.video.VideoCatalogScreen(
                 videos = videos,
                 onCatalogClick = { catalog -> selectedCatalog = catalog }
@@ -156,36 +209,37 @@ private fun VideosSection(hasPermission: Boolean, videos: List<MediaEntity>) {
 }
 
 @Composable
-private fun MusicaSection(hasPermission: Boolean, audios: List<MediaEntity>) {
-    val playerViewModel: com.jay.nyxplay.ui.music.MusicPlayerViewModel = viewModel()
+private fun MusicaSection(
+    hasPermission: Boolean,
+    audios: List<MediaEntity>,
+    playerViewModel: MusicPlayerViewModel,
+    showFullPlayer: Boolean,
+    onShowFullPlayerChange: (Boolean) -> Unit,
+    onSettingsClick: () -> Unit
+) {
     val playerUi by playerViewModel.state.collectAsState()
-    var showFullPlayer by remember { mutableStateOf(false) }
 
     when {
         !hasPermission -> CenteredMessage("A aguardar permissão de acesso à música…")
         audios.isEmpty() -> CenteredMessage("A indexar música do dispositivo…", showSpinner = true)
-        showFullPlayer && playerUi.isActive -> com.jay.nyxplay.ui.music.MusicPlayerScreen(
-            viewModel = playerViewModel,
-            onBack = { showFullPlayer = false }
-        )
         else -> Column(modifier = Modifier.fillMaxSize()) {
-            SectionHeader(title = "Música", subtitle = "${audios.size} músicas — Todas as músicas")
+            SectionHeader(title = "Música", subtitle = "${audios.size} músicas — Todas as músicas", onSettingsClick = onSettingsClick)
             com.jay.nyxplay.ui.music.MusicLibraryScreen(
                 audios = audios,
                 modifier = Modifier.weight(1f),
                 onSongClick = { index ->
                     playerViewModel.playQueue(audios, index)
-                    showFullPlayer = true
+                    onShowFullPlayerChange(true)
                 },
                 onShufflePlay = {
                     playerViewModel.playQueue(audios.shuffled(), 0)
-                    showFullPlayer = true
+                    onShowFullPlayerChange(true)
                 }
             )
             if (playerUi.isActive) {
                 com.jay.nyxplay.ui.music.MiniPlayerBar(
                     ui = playerUi,
-                    onOpenPlayer = { showFullPlayer = true },
+                    onOpenPlayer = { onShowFullPlayerChange(true) },
                     onTogglePlayPause = playerViewModel::togglePlayPause,
                     onNext = playerViewModel::next
                 )
@@ -195,19 +249,19 @@ private fun MusicaSection(hasPermission: Boolean, audios: List<MediaEntity>) {
 }
 
 @Composable
-private fun SectionHeader(title: String, subtitle: String) {
-    Column(modifier = Modifier.padding(16.dp)) {
-        Text(
-            title,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            subtitle,
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-        )
+private fun SectionHeader(title: String, subtitle: String, onSettingsClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text(subtitle, fontSize = 13.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f))
+        }
+        IconButton(onClick = onSettingsClick) {
+            Icon(Icons.Default.Settings, contentDescription = "Configurações")
+        }
     }
 }
 
