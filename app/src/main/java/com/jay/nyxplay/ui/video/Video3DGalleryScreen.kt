@@ -1,69 +1,60 @@
 package com.jay.nyxplay.ui.video
 
-import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import com.jay.nyxplay.data.MediaType
 import com.jay.nyxplay.ui.MediaThumbnail
 import kotlinx.coroutines.delay
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.roundToInt
 import kotlin.math.sin
 
-private enum class GalleryMode { ESPIRAL, CUBO }
+private enum class GalleryMode(val label: String) {
+    ESPIRAL("Espiral"),
+    HELICE("Hélice"),
+    CUBO("Cubo"),
+    TRANSLACAO("Translação")
+}
 
 /**
- * Carrossel 3D próprio (não usa LazyRow) — necessário para rotação
- * contínua e fluida, desacoplada do scroll bruto, que era a causa da
- * travagem na versão anterior. Cada item tem posição real calculada
- * por trigonometria (círculo em torno de um eixo vertical), não é
- * só uma fila com leve rotação.
- *
- * Fundo é estático (capa desfocada, sem animação) — a rotação é só
- * do próprio carrossel, como pedido.
+ * Galeria 3D — TOTALMENTE ESTÁTICA (só thumbnails, nenhum vídeo carrega
+ * ou reproduz aqui; isso acontece só ao tocar num item, que abre o feed
+ * completo). Fundo parado. Quatro modos com física distinta cada um.
  */
 @Composable
 fun Video3DGalleryScreen(
@@ -71,66 +62,25 @@ fun Video3DGalleryScreen(
     onBack: () -> Unit,
     onOpenFeed: (Int) -> Unit
 ) {
-    val context = LocalContext.current
     val density = LocalDensity.current
-
     var mode by remember { mutableStateOf(GalleryMode.ESPIRAL) }
     var angleDeg by remember { mutableFloatStateOf(0f) }
     var scale by remember { mutableFloatStateOf(1f) }
     var isInteracting by remember { mutableStateOf(false) }
-    var focusedIndex by remember { mutableIntStateOf(0) }
 
     val itemCount = catalog.videos.size
     val angleStep = if (itemCount > 0) 360f / itemCount else 0f
 
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            volume = 0f
-            repeatMode = Player.REPEAT_MODE_ONE
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { exoPlayer.release() }
-    }
-
-    // Rotação automática contínua — pausa durante interação manual,
-    // retoma sem saltos a partir do ângulo onde ficou.
-    LaunchedEffect(isInteracting) {
+    // Rotação/deslocamento automático contínuo — pausa durante gesto,
+    // retoma sem saltos. Velocidade varia por modo (Hélice mais lenta).
+    LaunchedEffect(isInteracting, mode) {
         if (!isInteracting) {
+            val speed = if (mode == GalleryMode.HELICE) 0.18f else 0.35f
             while (true) {
                 delay(16)
-                angleDeg = (angleDeg + 0.35f) % 360f
+                angleDeg = (angleDeg + speed) % 360f
             }
         }
-    }
-
-    // Índice em foco (o mais próximo da "frente") — recalculado a
-    // ritmo baixo (5x/s) num loop estável, não reiniciado a cada
-    // frame de rotação (isso seria tão pesado quanto o problema original).
-    LaunchedEffect(itemCount) {
-        if (itemCount == 0) return@LaunchedEffect
-        while (true) {
-            var closest = 0
-            var closestDist = Float.MAX_VALUE
-            for (i in 0 until itemCount) {
-                val itemAngle = (angleStep * i + angleDeg) % 360f
-                val dist = kotlin.math.abs(((itemAngle + 180f) % 360f) - 180f)
-                if (dist < closestDist) {
-                    closestDist = dist
-                    closest = i
-                }
-            }
-            if (closest != focusedIndex) focusedIndex = closest
-            delay(200)
-        }
-    }
-
-    LaunchedEffect(focusedIndex) {
-        val video = catalog.videos.getOrNull(focusedIndex) ?: return@LaunchedEffect
-        exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(video.uri)))
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
     }
 
     Box(
@@ -147,22 +97,20 @@ fun Video3DGalleryScreen(
     ) {
         BackHandler(onBack = onBack)
 
-        // Fundo ESTÁTICO — sem animação nenhuma
+        // Fundo estático — capa desfocada, sem nenhuma animação
         MediaThumbnail(
             uri = catalog.coverUri,
             type = MediaType.VIDEO,
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = 0.35f }
+                .graphicsLayer { alpha = 0.3f }
                 .let { if (Build.VERSION.SDK_INT >= 31) it.blur(35.dp) else it }
         )
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)))
 
-        val radiusPx = with(density) { 140.dp.toPx() }
         val itemWidth = 190.dp
         val itemHeight = 250.dp
-        val spiralStepPx = with(density) { 14.dp.toPx() }
-        val centerIndex = itemCount / 2f
+        val itemSpacingPx = with(density) { 130.dp.toPx() }
 
         Box(
             modifier = Modifier
@@ -179,57 +127,74 @@ fun Video3DGalleryScreen(
                         .height(itemHeight)
                         .graphicsLayer {
                             cameraDistance = 16f * density.density
-                            val itemAngleDeg = (angleStep * index + angleDeg) % 360f
-                            val rad = itemAngleDeg * PI.toFloat() / 180f
-                            val x = sin(rad) * radiusPx
-                            val depthFactor = cos(rad) // -1 (trás) .. 1 (frente)
-                            val itemScale = 0.55f + 0.45f * ((depthFactor + 1f) / 2f)
-                            val itemAlpha = 0.3f + 0.7f * ((depthFactor + 1f) / 2f)
 
-                            translationX = x
-                            translationY = when (mode) {
-                                GalleryMode.ESPIRAL -> (index - centerIndex) * spiralStepPx * 0.3f
-                                GalleryMode.CUBO -> 0f
-                            }
-                            scaleX = itemScale
-                            scaleY = itemScale
-                            alpha = itemAlpha
-                            rotationY = when (mode) {
-                                GalleryMode.ESPIRAL -> -itemAngleDeg
-                                GalleryMode.CUBO -> -itemAngleDeg * 0.5f
+                            when (mode) {
+                                GalleryMode.ESPIRAL -> {
+                                    val radiusPx = with(density) { 140.dp.toPx() }
+                                    val itemAngleDeg = (angleStep * index + angleDeg) % 360f
+                                    val rad = itemAngleDeg * PI.toFloat() / 180f
+                                    val depth = cos(rad)
+                                    translationX = sin(rad) * radiusPx
+                                    translationY = (index - itemCount / 2f) * (itemSpacingPx * 0.12f)
+                                    val s = 0.55f + 0.45f * ((depth + 1f) / 2f)
+                                    scaleX = s; scaleY = s
+                                    alpha = 0.3f + 0.7f * ((depth + 1f) / 2f)
+                                    rotationY = -itemAngleDeg
+                                }
+                                GalleryMode.HELICE -> {
+                                    val radiusPx = with(density) { 95.dp.toPx() }
+                                    val itemAngleDeg = (angleStep * index + angleDeg) % 360f
+                                    val rad = itemAngleDeg * PI.toFloat() / 180f
+                                    val depth = cos(rad)
+                                    translationX = sin(rad) * radiusPx
+                                    translationY = (index - itemCount / 2f) * (itemSpacingPx * 0.42f)
+                                    val s = 0.5f + 0.4f * ((depth + 1f) / 2f)
+                                    scaleX = s; scaleY = s
+                                    alpha = 0.25f + 0.75f * ((depth + 1f) / 2f)
+                                    rotationY = -itemAngleDeg
+                                }
+                                GalleryMode.CUBO -> {
+                                    val radiusPx = with(density) { 150.dp.toPx() }
+                                    val itemAngleDeg = (angleStep * index + angleDeg) % 360f
+                                    val rad = itemAngleDeg * PI.toFloat() / 180f
+                                    val depth = cos(rad)
+                                    translationX = sin(rad) * radiusPx
+                                    translationY = 0f
+                                    val s = 0.6f + 0.4f * ((depth + 1f) / 2f)
+                                    scaleX = s; scaleY = s
+                                    alpha = 0.35f + 0.65f * ((depth + 1f) / 2f)
+                                    rotationY = -itemAngleDeg * 0.5f
+                                    transformOrigin = TransformOrigin(
+                                        if (itemAngleDeg in 0f..180f) 0f else 1f, 0.5f
+                                    )
+                                }
+                                GalleryMode.TRANSLACAO -> {
+                                    val totalWidth = itemSpacingPx * itemCount
+                                    val dragOffsetPx = (angleDeg / 360f) * totalWidth
+                                    var tx = (index - itemCount / 2f) * itemSpacingPx - dragOffsetPx
+                                    tx = floorMod(tx + totalWidth / 2f, totalWidth) - totalWidth / 2f
+                                    val distFrac = (abs(tx) / (itemSpacingPx * 2.2f)).coerceIn(0f, 1f)
+                                    translationX = tx
+                                    translationY = 0f
+                                    val s = 1f - distFrac * 0.35f
+                                    scaleX = s; scaleY = s
+                                    alpha = 1f - distFrac * 0.6f
+                                    rotationY = (tx / itemSpacingPx).coerceIn(-1f, 1f) * -35f
+                                }
                             }
                         }
-                        .zIndex(cos((angleStep * index + angleDeg) * PI.toFloat() / 180f))
+                        .zIndex(zIndexFor(mode, index, angleStep, angleDeg, itemCount, itemSpacingPx))
                         .clip(RoundedCornerShape(14.dp))
                         .background(Color(0xFF1A1A22))
                         .pointerInput(index) {
                             detectTapGestures { onOpenFeed(index) }
                         }
                 ) {
-                    if (index == focusedIndex) {
-                        AndroidView(
-                            factory = {
-                                PlayerView(it).apply {
-                                    player = exoPlayer
-                                    useController = false
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        val itemAngleDeg = (angleStep * index + angleDeg) % 360f
-                        val depthFactor = cos(itemAngleDeg * PI.toFloat() / 180f)
-                        if (depthFactor > -0.3f) {
-                            MediaThumbnail(
-                                uri = video.uri,
-                                type = MediaType.VIDEO,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                        // Itens de costas (depthFactor <= -0.3) ficam só com o
-                        // fundo sólido já aplicado à Box — sem decode de thumbnail,
-                        // para não sobrecarregar memória com catálogos grandes.
-                    }
+                    MediaThumbnail(
+                        uri = video.uri,
+                        type = MediaType.VIDEO,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
         }
@@ -245,7 +210,7 @@ fun Video3DGalleryScreen(
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 20.dp)
         )
 
-        androidx.compose.foundation.layout.Row(
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 24.dp)
@@ -254,14 +219,40 @@ fun Video3DGalleryScreen(
         ) {
             GalleryMode.entries.forEach { m ->
                 Text(
-                    if (m == GalleryMode.ESPIRAL) "Espiral" else "Cubo",
+                    m.label,
                     color = if (mode == m) Color.White else Color.White.copy(alpha = 0.5f),
                     fontSize = 13.sp,
                     modifier = Modifier
                         .pointerInput(m) { detectTapGestures { mode = m } }
-                        .padding(horizontal = 20.dp, vertical = 10.dp)
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
                 )
             }
         }
+    }
+}
+
+private fun floorMod(value: Float, modulus: Float): Float {
+    val r = value % modulus
+    return if (r < 0) r + modulus else r
+}
+
+private fun zIndexFor(
+    mode: GalleryMode,
+    index: Int,
+    angleStep: Float,
+    angleDeg: Float,
+    itemCount: Int,
+    itemSpacingPx: Float
+): Float {
+    return if (mode == GalleryMode.TRANSLACAO) {
+        val totalWidth = itemSpacingPx * itemCount
+        val dragOffsetPx = (angleDeg / 360f) * totalWidth
+        var tx = (index - itemCount / 2f) * itemSpacingPx - dragOffsetPx
+        tx = floorMod(tx + totalWidth / 2f, totalWidth) - totalWidth / 2f
+        -abs(tx)
+    } else {
+        val itemAngleDeg = (angleStep * index + angleDeg) % 360f
+        val rad = itemAngleDeg * PI.toFloat() / 180f
+        cos(rad)
     }
 }

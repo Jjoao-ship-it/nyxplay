@@ -95,19 +95,16 @@ fun NyxPlayApp(viewModel: LibraryViewModel = viewModel()) {
     }
 
     Scaffold(
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = section == NyxSection.VIDEOS,
-                    onClick = { section = NyxSection.VIDEOS },
-                    icon = { Icon(Icons.Default.Movie, contentDescription = null) },
-                    label = { Text("Vídeos") }
-                )
-                NavigationBarItem(
-                    selected = section == NyxSection.MUSICA,
-                    onClick = { section = NyxSection.MUSICA },
-                    icon = { Icon(Icons.Default.MusicNote, contentDescription = null) },
-                    label = { Text("Música") }
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = {
+                    section = if (section == NyxSection.VIDEOS) NyxSection.MUSICA else NyxSection.VIDEOS
+                },
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(
+                    if (section == NyxSection.VIDEOS) Icons.Default.MusicNote else Icons.Default.Movie,
+                    contentDescription = "Trocar secção"
                 )
             }
         }
