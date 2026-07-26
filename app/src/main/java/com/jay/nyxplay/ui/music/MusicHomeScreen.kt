@@ -28,7 +28,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,7 +51,7 @@ fun MusicHomeScreen(
     onSongClick: (List<MediaEntity>, Int) -> Unit,
     onShufflePlay: () -> Unit
 ) {
-    var openList by remember { androidx.compose.runtime.mutableStateOf<QuickList?>(null) }
+    var openList by remember { mutableStateOf<QuickList?>(null) }
 
     val historico = remember(audios) { audios.filter { it.lastPlayedAt > 0 }.sortedByDescending { it.lastPlayedAt } }
     val recentes = remember(audios) { audios.sortedByDescending { it.dateAdded } }
