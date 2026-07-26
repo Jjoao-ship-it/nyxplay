@@ -21,4 +21,24 @@ interface MediaDao {
      */
     @Query("DELETE FROM media_items WHERE type = :type AND uid NOT IN (:validUids)")
     suspend fun deleteMissing(type: MediaType, validUids: List<String>)
+
+    // --- Rastreio real de reprodução (base para Início, Histórico, Mais tocadas) ---
+
+    @Query(
+        "UPDATE media_items SET playCount = playCount + 1, lastPlayedAt = :timestamp WHERE uid = :uid"
+    )
+    suspend fun registerPlay(uid: String, timestamp: Long)
+
+    @Query("UPDATE media_items SET watchedPercent = :percent WHERE uid = :uid")
+    suspend fun updateWatchedPercent(uid: String, percent: Int)
+
+    @Query(
+        "SELECT * FROM media_items WHERE type = :type AND playCount > 0 ORDER BY playCount DESC LIMIT :limit"
+    )
+    fun observeMostPlayed(type: MediaType, limit: Int): Flow<List<MediaEntity>>
+
+    @Query(
+        "SELECT * FROM media_items WHERE type = :type AND lastPlayedAt > 0 ORDER BY lastPlayedAt DESC LIMIT :limit"
+    )
+    fun observeRecentlyPlayed(type: MediaType, limit: Int): Flow<List<MediaEntity>>
 }

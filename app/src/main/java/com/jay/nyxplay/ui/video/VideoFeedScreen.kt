@@ -113,6 +113,9 @@ fun VideoFeedScreen(videos: List<MediaEntity>, startIndex: Int, onBack: () -> Un
         exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(video.uri)))
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
+
+        com.jay.nyxplay.data.NyxDatabase.getInstance(context).mediaDao()
+            .registerPlay(video.uid, System.currentTimeMillis())
     }
 
     LaunchedEffect(pagerState.settledPage) {

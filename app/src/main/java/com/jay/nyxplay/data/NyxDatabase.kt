@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 
 @Database(
     entities = [MediaEntity::class, PlaylistEntity::class, PlaylistMediaCrossRef::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(MediaTypeConverters::class)
