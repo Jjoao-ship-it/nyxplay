@@ -218,24 +218,58 @@ private fun MusicaSection(
     onSettingsClick: () -> Unit
 ) {
     val playerUi by playerViewModel.state.collectAsState()
+    var showFullLibrary by remember { mutableStateOf(false) }
 
     when {
         !hasPermission -> CenteredMessage("A aguardar permissão de acesso à música…")
         audios.isEmpty() -> CenteredMessage("A indexar música do dispositivo…", showSpinner = true)
         else -> Column(modifier = Modifier.fillMaxSize()) {
-            SectionHeader(title = "Música", subtitle = "${audios.size} músicas — Todas as músicas", onSettingsClick = onSettingsClick)
-            com.jay.nyxplay.ui.music.MusicLibraryScreen(
-                audios = audios,
-                modifier = Modifier.weight(1f),
-                onSongClick = { index ->
-                    playerViewModel.playQueue(audios, index)
-                    onShowFullPlayerChange(true)
-                },
-                onShufflePlay = {
-                    playerViewModel.playQueue(audios.shuffled(), 0)
-                    onShowFullPlayerChange(true)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row {
+                    TextButton(onClick = { showFullLibrary = false }) {
+                        Text("Início", fontWeight = if (!showFullLibrary) FontWeight.Bold else FontWeight.Normal)
+                    }
+                    TextButton(onClick = { showFullLibrary = true }) {
+                        Text("Música", fontWeight = if (showFullLibrary) FontWeight.Bold else FontWeight.Normal)
+                    }
                 }
-            )
+                IconButton(onClick = onSettingsClick) {
+                    Icon(Icons.Default.Settings, contentDescription = "Configurações")
+                }
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
+                if (showFullLibrary) {
+                    com.jay.nyxplay.ui.music.MusicLibraryScreen(
+                        audios = audios,
+                        onSongClick = { index ->
+                            playerViewModel.playQueue(audios, index)
+                            onShowFullPlayerChange(true)
+                        },
+                        onShufflePlay = {
+                            playerViewModel.playQueue(audios.shuffled(), 0)
+                            onShowFullPlayerChange(true)
+                        }
+                    )
+                } else {
+                    com.jay.nyxplay.ui.music.MusicHomeScreen(
+                        audios = audios,
+                        onSongClick = { queue, index ->
+                            playerViewModel.playQueue(queue, index)
+                            onShowFullPlayerChange(true)
+                        },
+                        onShufflePlay = {
+                            playerViewModel.playQueue(audios.shuffled(), 0)
+                            onShowFullPlayerChange(true)
+                        }
+                    )
+                }
+            }
+
             if (playerUi.isActive) {
                 com.jay.nyxplay.ui.music.MiniPlayerBar(
                     ui = playerUi,

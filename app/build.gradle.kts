@@ -8,6 +8,15 @@ android {
     namespace = "com.jay.nyxplay"
     compileSdk = 34
 
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("nyxplay-debug.keystore")
+            storePassword = "nyxplay123"
+            keyAlias = "nyxplay"
+            keyPassword = "nyxplay123"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.jay.nyxplay"
         minSdk = 26
