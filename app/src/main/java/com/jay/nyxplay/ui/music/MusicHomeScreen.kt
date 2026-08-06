@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -101,7 +102,30 @@ fun MusicHomeScreen(
                 item { SectionLabel("Sugestões") }
                 item {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp)) {
-                        items(sugestoes, key = { it.uid }) { song ->
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 12.dp)
+                                    .size(width = 130.dp, height = 150.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(MaterialTheme.colorScheme.primary, Color(0xFF2A1E5C))
+                                        )
+                                    )
+                                    .clickable { onSongClick(sugestoes, 0) }
+                                    .padding(14.dp)
+                            ) {
+                                Text(
+                                    "Novo mix\nde música",
+                                    color = Color.White,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.align(Alignment.BottomStart)
+                                )
+                            }
+                        }
+                        items(sugestoes.drop(1), key = { it.uid }) { song ->
                             Column(
                                 modifier = Modifier
                                     .padding(end = 12.dp)

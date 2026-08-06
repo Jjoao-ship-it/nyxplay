@@ -55,8 +55,6 @@ fun NyxPlayTheme(content: @Composable () -> Unit) {
 
 private enum class NyxSection { VIDEOS, MUSICA }
 
-/** Estado de navegação global — Settings e Playlists são partilhados
- * entre Vídeo e Música, por isso vivem acima das secções, não dentro. */
 private sealed class Overlay {
     object None : Overlay()
     object Settings : Overlay()
@@ -179,6 +177,7 @@ private fun VideosSection(
     videos: List<MediaEntity>,
     onSettingsClick: () -> Unit
 ) {
+    var showAlbuns by remember { mutableStateOf(false) }
     var selectedCatalog by remember { mutableStateOf<com.jay.nyxplay.ui.video.VideoCatalog?>(null) }
     var feedStartIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -199,11 +198,45 @@ private fun VideosSection(
         )
 
         else -> Column(modifier = Modifier.fillMaxSize()) {
-            SectionHeader(title = "Vídeos", subtitle = "${videos.size} vídeos — catálogos por origem", onSettingsClick = onSettingsClick)
-            com.jay.nyxplay.ui.video.VideoCatalogScreen(
-                videos = videos,
-                onCatalogClick = { catalog -> selectedCatalog = catalog }
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row {
+                    TextButton(onClick = { showAlbuns = false }) {
+                        Text("Início", fontWeight = if (!showAlbuns) FontWeight.Bold else FontWeight.Normal)
+                    }
+                    TextButton(onClick = { showAlbuns = true }) {
+                        Text("Álbuns", fontWeight = if (showAlbuns) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+                IconButton(onClick = onSettingsClick) {
+                    Icon(Icons.Default.Settings, contentDescription = "Configurações")
+                }
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
+                if (showAlbuns) {
+                    com.jay.nyxplay.ui.video.VideoCatalogScreen(
+                        videos = videos,
+                        onCatalogClick = { catalog -> selectedCatalog = catalog }
+                    )
+                } else {
+                    com.jay.nyxplay.ui.video.VideoHomeScreen(
+                        videos = videos,
+                        onVideoClick = { list, index ->
+                            selectedCatalog = com.jay.nyxplay.ui.video.VideoCatalog("Sessão", list)
+                            feedStartIndex = index
+                        },
+                        onShufflePlay = {
+                            val shuffled = videos.shuffled()
+                            selectedCatalog = com.jay.nyxplay.ui.video.VideoCatalog("Sessão", shuffled)
+                            feedStartIndex = 0
+                        }
+                    )
+                }
+            }
         }
     }
 }
@@ -278,23 +311,6 @@ private fun MusicaSection(
                     onNext = playerViewModel::next
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String, subtitle: String, onSettingsClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            Text(subtitle, fontSize = 13.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f))
-        }
-        IconButton(onClick = onSettingsClick) {
-            Icon(Icons.Default.Settings, contentDescription = "Configurações")
         }
     }
 }
