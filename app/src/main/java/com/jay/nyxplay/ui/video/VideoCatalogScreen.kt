@@ -40,19 +40,13 @@ data class VideoCatalog(
     val coverUri: String get() = videos.minByOrNull { it.dateAdded }?.uri ?: videos.first().uri
 }
 
-/**
- * Grid em cascata desalinhada, estilo "mesa de fotos espalhadas" —
- * cada cartão com leve rotação e altura variável, deterministicamente
- * derivadas do nome (mesma disposição sempre, sem recalcular ao
- * recompor). Respeita as pastas excluídas definidas em Configurações.
- */
 @Composable
 fun VideoCatalogScreen(
     videos: List<MediaEntity>,
     onCatalogClick: (VideoCatalog) -> Unit,
     settingsViewModel: SettingsViewModel = viewModel()
 ) {
-    val excludedBuckets by settingsViewModel.excludedBuckets.collectAsState()
+    val excludedBuckets by settingsViewModel.excludedVideoBuckets.collectAsState()
 
     val catalogs = remember(videos, excludedBuckets) {
         videos
@@ -70,8 +64,8 @@ fun VideoCatalogScreen(
     ) {
         items(catalogs, key = { it.name }) { catalog ->
             val seed = abs(catalog.name.hashCode())
-            val tiltDegrees = ((seed % 9) - 4).toFloat() // -4..+4 graus
-            val aspectVariance = 1.0f + (seed % 5) * 0.08f // 1.0..1.32
+            val tiltDegrees = ((seed % 9) - 4).toFloat()
+            val aspectVariance = 1.0f + (seed % 5) * 0.08f
 
             Column(
                 modifier = Modifier

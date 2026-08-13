@@ -7,9 +7,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Indexa vídeo e áudio do dispositivo via MediaStore (duas fontes
- * independentes, dois namespaces de conteúdo), e sincroniza cada um
- * com a sua playlist automática — sem depender de estrutura de pastas.
+ * Indexa vídeo e áudio do dispositivo via MediaStore, e sincroniza
+ * cada um com a sua playlist automática — sem depender de estrutura
+ * de pastas na UI (o bucketName é só um sinal interno de agrupamento
+ * e de lista negra em Configurações).
  */
 class MediaScanner(private val context: Context) {
 
@@ -68,10 +69,10 @@ class MediaScanner(private val context: Context) {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.SIZE,
             MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.BUCKET_DISPLAY_NAME
         )
 
-        // IS_MUSIC filtra tons de chamada, notificações, etc. — só música real
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
@@ -86,6 +87,7 @@ class MediaScanner(private val context: Context) {
             val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
             val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val bucketCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.BUCKET_DISPLAY_NAME)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
@@ -100,7 +102,8 @@ class MediaScanner(private val context: Context) {
                     durationMs = cursor.getLong(durCol),
                     sizeBytes = cursor.getLong(sizeCol),
                     artist = cursor.getString(artistCol),
-                    album = cursor.getString(albumCol)
+                    album = cursor.getString(albumCol),
+                    bucketName = cursor.getString(bucketCol)
                 )
             }
         }

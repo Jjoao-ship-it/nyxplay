@@ -21,10 +21,12 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.jay.nyxplay.data.MediaEntity
 import com.jay.nyxplay.data.NyxDatabase
+import com.jay.nyxplay.data.SettingsRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -41,45 +43,42 @@ data class PlayerUiState(
     val currentSong: MediaEntity? get() = queue.getOrNull(currentIndex)
 }
 
-/**
- * Dono único do ExoPlayer de música — vive no ViewModel, não num
- * Composable, precisamente para sobreviver a navegação (voltar à
- * biblioteca) e troca de separador, como um leitor de música real faz.
- *
- * Também trata duas pausas automáticas reais:
- * - Ao perder ligação Bluetooth/auscultadores (ACTION_AUDIO_BECOMING_NOISY,
- *   a forma correta e oficial do Android de detetar isto — pausa, não toca).
- * - Ao volume chegar a zero (ContentObserver do volume do sistema) —
- *   pausa, e retoma se o volume subir de novo.
- */
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
     private val exoPlayer = ExoPlayer.Builder(application).build()
     private val _state = MutableStateFlow(PlayerUiState())
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
 
+    private val settingsRepository = SettingsRepository(application)
     private val audioManager = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var pausedByVolumeZero = false
 
     private val becomingNoisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
-                exoPlayer.pause()
+                viewModelScope.launch {
+                    if (settingsRepository.pauseOnBluetoothDisconnect.first()) {
+                        exoPlayer.pause()
+                    }
+                }
             }
         }
     }
 
     private val volumeObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
-            val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-            if (currentVolume <= 0) {
-                if (exoPlayer.isPlaying) {
-                    pausedByVolumeZero = true
-                    exoPlayer.pause()
+            viewModelScope.launch {
+                if (!settingsRepository.pauseOnVolumeZero.first()) return@launch
+                val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                if (currentVolume <= 0) {
+                    if (exoPlayer.isPlaying) {
+                        pausedByVolumeZero = true
+                        exoPlayer.pause()
+                    }
+                } else if (pausedByVolumeZero) {
+                    pausedByVolumeZero = false
+                    exoPlayer.play()
                 }
-            } else if (pausedByVolumeZero) {
-                pausedByVolumeZero = false
-                exoPlayer.play()
             }
         }
     }
@@ -174,7 +173,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         exoPlayer.playWhenReady = true
 
         viewModelScope.launch {
-            NyxDatabase.getInstance(getApplication()).mediaDao().registerPlay(audio.uid, System.currentTimeMillis())
+            if (settingsRepository.historyEnabled.first()) {
+                NyxDatabase.getInstance(getApplication()).mediaDao().registerPlay(audio.uid, System.currentTimeMillis())
+            }
         }
 
         viewModelScope.launch {

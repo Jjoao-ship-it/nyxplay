@@ -36,7 +36,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            NyxPlayTheme {
+            val settingsViewModel: com.jay.nyxplay.ui.settings.SettingsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+            val accentHex by settingsViewModel.accentColorHex.collectAsState()
+            NyxPlayTheme(accentColor = Color(accentHex)) {
                 NyxPlayApp()
             }
         }
@@ -44,9 +46,9 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun NyxPlayTheme(content: @Composable () -> Unit) {
+fun NyxPlayTheme(accentColor: Color = Color(0xFF7C5CFF), content: @Composable () -> Unit) {
     val colorScheme = darkColorScheme(
-        primary = Color(0xFF7C5CFF),
+        primary = accentColor,
         background = Color(0xFF0E0E12),
         surface = Color(0xFF16161C)
     )
@@ -77,6 +79,17 @@ fun NyxPlayApp(viewModel: LibraryViewModel = viewModel()) {
     var hasVideoPermission by remember { mutableStateOf(false) }
     var hasAudioPermission by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<Overlay>(Overlay.None) }
+    val settingsViewModel: com.jay.nyxplay.ui.settings.SettingsViewModel = viewModel()
+
+    LaunchedEffect(Unit) {
+        if (settingsViewModel.rememberLastSection.value) {
+            section = if (settingsViewModel.readLastSection() == "MUSICA") NyxSection.MUSICA else NyxSection.VIDEOS
+        }
+    }
+
+    LaunchedEffect(section) {
+        settingsViewModel.setLastSection(if (section == NyxSection.MUSICA) "MUSICA" else "VIDEOS")
+    }
 
     val videos by viewModel.videos.collectAsState()
     val audios by viewModel.audios.collectAsState()
@@ -119,6 +132,7 @@ fun NyxPlayApp(viewModel: LibraryViewModel = viewModel()) {
             when (val ov = overlay) {
                 is Overlay.Settings -> SettingsScreen(
                     videos = videos,
+                    contextType = if (section == NyxSection.VIDEOS) MediaType.VIDEO else MediaType.AUDIO,
                     onBack = { overlay = Overlay.None },
                     onOpenPlaylists = { overlay = Overlay.PlaylistManager(if (section == NyxSection.VIDEOS) MediaType.VIDEO else MediaType.AUDIO) }
                 )
