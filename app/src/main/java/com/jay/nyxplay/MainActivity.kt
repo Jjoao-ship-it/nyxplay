@@ -73,7 +73,6 @@ private fun installCrashHandler(context: android.content.Context) {
         defaultHandler?.uncaughtException(thread, throwable)
     }
 }
-}
 
 @Composable
 fun NyxPlayTheme(accentColor: Color = Color(0xFF7C5CFF), content: @Composable () -> Unit) {
