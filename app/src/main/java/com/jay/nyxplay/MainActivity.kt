@@ -35,6 +35,7 @@ import com.jay.nyxplay.ui.video.VideoFeedScreen
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        installCrashHandler(this)
         setContent {
             val settingsViewModel: com.jay.nyxplay.ui.settings.SettingsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
             val accentHex by settingsViewModel.accentColorHex.collectAsState()
@@ -43,6 +44,35 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+/**
+ * Apanhador de crash autónomo — escreve o stack trace real num
+ * ficheiro de texto antes de a app fechar, sem depender de ADB,
+ * Depuração sem Fios, ou Opções de Programador.
+ */
+private fun installCrashHandler(context: android.content.Context) {
+    val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+    Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+        try {
+            val text = "NyxPlay crash — ${java.util.Date()}\n\n" + android.util.Log.getStackTraceString(throwable)
+            val resolver = context.contentResolver
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "nyxplay_crash.txt")
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+            }
+            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            uri?.let {
+                resolver.openOutputStream(it)?.use { stream -> stream.write(text.toByteArray()) }
+            }
+        } catch (e: Exception) {
+            // Se nem isto funcionar, não há mais nada a fazer aqui —
+            // ao menos não mascara o crash original.
+        }
+        defaultHandler?.uncaughtException(thread, throwable)
+    }
+}
 }
 
 @Composable
