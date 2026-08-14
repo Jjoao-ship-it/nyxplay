@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jay.nyxplay.data.ACCENT_OPTIONS
 import com.jay.nyxplay.data.MediaEntity
 import com.jay.nyxplay.data.MediaType
 import com.jay.nyxplay.data.PlayerSkin
