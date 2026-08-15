@@ -125,8 +125,17 @@ class MediaScanner(private val context: Context) {
     ) {
         val mediaDao = db.mediaDao()
         mediaDao.insertAll(items)
-        if (items.isNotEmpty()) {
-            mediaDao.deleteMissing(type, items.map { it.uid })
+
+        // Calcula quais itens desapareceram do dispositivo comparando
+        // localmente, em vez de uma query NOT IN gigante (que crasha
+        // com bibliotecas grandes — limite de 999 variáveis do SQLite).
+        val existingUids = mediaDao.getAllUidsForType(type).toSet()
+        val freshUids = items.map { it.uid }.toSet()
+        val missingUids = (existingUids - freshUids).toList()
+        if (missingUids.isNotEmpty()) {
+            missingUids.chunked(900).forEach { chunk ->
+                mediaDao.deleteByUids(chunk)
+            }
         }
 
         val playlistDao = db.playlistDao()

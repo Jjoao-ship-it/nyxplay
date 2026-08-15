@@ -16,13 +16,23 @@ interface MediaDao {
     suspend fun insertAll(items: List<MediaEntity>)
 
     /**
-     * Remove itens de um tipo que já não existem no dispositivo.
-     * Filtra por tipo para não apagar áudio ao re-scanear vídeo, e vice-versa.
+     * Todos os uid já indexados de um tipo — usado para calcular,
+     * do lado do Kotlin, quais itens desapareceram do dispositivo
+     * (em vez de uma única query gigante NOT IN, que estoura o
+     * limite de 999 variáveis do SQLite em bibliotecas grandes).
      */
-    @Query("DELETE FROM media_items WHERE type = :type AND uid NOT IN (:validUids)")
-    suspend fun deleteMissing(type: MediaType, validUids: List<String>)
+    @Query("SELECT uid FROM media_items WHERE type = :type")
+    suspend fun getAllUidsForType(type: MediaType): List<String>
 
-    // --- Rastreio real de reprodução (base para Início, Histórico, Mais tocadas) ---
+    /**
+     * Apaga por uid explícito — seguro para dividir em blocos,
+     * ao contrário de NOT IN (cada bloco aqui apaga um subconjunto
+     * inequívoco, sem risco de apagar o que não devia).
+     */
+    @Query("DELETE FROM media_items WHERE uid IN (:uids)")
+    suspend fun deleteByUids(uids: List<String>)
+
+    // --- Rastreio real de reprodução ---
 
     @Query(
         "UPDATE media_items SET playCount = playCount + 1, lastPlayedAt = :timestamp WHERE uid = :uid"
