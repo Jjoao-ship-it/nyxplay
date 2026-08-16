@@ -83,6 +83,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private var tickCount = 0
+
     init {
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -112,8 +114,46 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         durationMs = exoPlayer.duration.coerceAtLeast(0)
                     )
                 }
+                tickCount++
+                if (tickCount % 10 == 0 && _state.value.isActive) {
+                    saveQueueState()
+                }
                 delay(500)
             }
+        }
+    }
+
+    private fun saveQueueState() {
+        val s = _state.value
+        viewModelScope.launch {
+            settingsRepository.saveLastQueue(s.queue.map { it.uid }, s.currentIndex, exoPlayer.currentPosition)
+        }
+    }
+
+    /**
+     * Restaura a última fila guardada (se existir) a partir da
+     * biblioteca já carregada — sem começar a tocar sozinho, só
+     * prepara o player na posição onde ficaste.
+     */
+    fun restoreLastQueueIfAny(fullLibrary: List<MediaEntity>) {
+        if (_state.value.isActive || fullLibrary.isEmpty()) return
+        viewModelScope.launch {
+            val uids = settingsRepository.lastQueueUids.first()
+            if (uids.isEmpty()) return@launch
+            val restoredQueue = uids.mapNotNull { uid -> fullLibrary.firstOrNull { it.uid == uid } }
+            if (restoredQueue.isEmpty()) return@launch
+            val index = settingsRepository.lastQueueIndex.first().coerceIn(0, restoredQueue.lastIndex)
+            val positionMs = settingsRepository.lastPositionMs.first()
+
+            _state.update { it.copy(queue = restoredQueue, currentIndex = index, isActive = true) }
+            val audio = restoredQueue[index]
+            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(audio.uri)))
+            exoPlayer.prepare()
+            exoPlayer.seekTo(positionMs)
+            exoPlayer.playWhenReady = false
+
+            val art = loadAlbumArt(getApplication(), audio.uri)
+            _state.update { it.copy(albumArt = art.bitmap, dominantColor = art.dominantColor) }
         }
     }
 

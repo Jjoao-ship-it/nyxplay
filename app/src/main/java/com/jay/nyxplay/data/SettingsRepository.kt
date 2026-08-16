@@ -3,6 +3,8 @@ package com.jay.nyxplay.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -39,6 +41,25 @@ class SettingsRepository(private val context: Context) {
         val HISTORY_ENABLED = booleanPreferencesKey("history_enabled")
         val REMEMBER_LAST_SECTION = booleanPreferencesKey("remember_last_section")
         val LAST_SECTION = stringPreferencesKey("last_section")
+        val LAST_QUEUE_UIDS = stringPreferencesKey("last_queue_uids")
+        val LAST_QUEUE_INDEX = intPreferencesKey("last_queue_index")
+        val LAST_POSITION_MS = longPreferencesKey("last_position_ms")
+    }
+
+    // --- Memorizar última reprodução (música) ---
+
+    val lastQueueUids: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        prefs[Keys.LAST_QUEUE_UIDS]?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+    }
+    val lastQueueIndex: Flow<Int> = context.dataStore.data.map { it[Keys.LAST_QUEUE_INDEX] ?: 0 }
+    val lastPositionMs: Flow<Long> = context.dataStore.data.map { it[Keys.LAST_POSITION_MS] ?: 0L }
+
+    suspend fun saveLastQueue(uids: List<String>, index: Int, positionMs: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LAST_QUEUE_UIDS] = uids.joinToString(",")
+            prefs[Keys.LAST_QUEUE_INDEX] = index
+            prefs[Keys.LAST_POSITION_MS] = positionMs
+        }
     }
 
     // --- Gerais ---
