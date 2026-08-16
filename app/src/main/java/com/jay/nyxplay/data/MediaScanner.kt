@@ -124,7 +124,23 @@ class MediaScanner(private val context: Context) {
         autoPlaylistName: String
     ) {
         val mediaDao = db.mediaDao()
-        mediaDao.insertAll(items)
+
+        // Preserva playCount/lastPlayedAt/watchedPercent dos itens já
+        // existentes — sem isto, o REPLACE do insertAll zerava as
+        // estatísticas de reprodução a cada reabertura da app.
+        val existingStats = mediaDao.getAllForType(type).associateBy { it.uid }
+        val mergedItems = items.map { fresh ->
+            val existing = existingStats[fresh.uid]
+            if (existing != null) {
+                fresh.copy(
+                    playCount = existing.playCount,
+                    lastPlayedAt = existing.lastPlayedAt,
+                    watchedPercent = existing.watchedPercent
+                )
+            } else fresh
+        }
+
+        mediaDao.insertAll(mergedItems)
 
         // Calcula quais itens desapareceram do dispositivo comparando
         // localmente, em vez de uma query NOT IN gigante (que crasha

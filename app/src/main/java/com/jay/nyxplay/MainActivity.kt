@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
                 var minTimeElapsed by remember { mutableStateOf(false) }
 
                 LaunchedEffect(Unit) {
-                    delay(1100)
+                    delay(1600)
                     minTimeElapsed = true
                 }
                 LaunchedEffect(minTimeElapsed) {

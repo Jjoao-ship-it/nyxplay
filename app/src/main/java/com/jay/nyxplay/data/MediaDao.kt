@@ -25,6 +25,15 @@ interface MediaDao {
     suspend fun getAllUidsForType(type: MediaType): List<String>
 
     /**
+     * Leitura completa (não Flow) — usada só para preservar playCount/
+     * lastPlayedAt/watchedPercent antes de um re-scan sobrescrever a
+     * linha (ver bug corrigido: o REPLACE do insertAll não sabia
+     * disto e zerava as estatísticas a cada reabertura da app).
+     */
+    @Query("SELECT * FROM media_items WHERE type = :type")
+    suspend fun getAllForType(type: MediaType): List<MediaEntity>
+
+    /**
      * Apaga por uid explícito — seguro para dividir em blocos,
      * ao contrário de NOT IN (cada bloco aqui apaga um subconjunto
      * inequívoco, sem risco de apagar o que não devia).
