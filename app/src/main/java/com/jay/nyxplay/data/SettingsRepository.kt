@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.map
 private val Context.dataStore by preferencesDataStore(name = "nyxplay_settings")
 
 enum class PlayerSkin { CARD, GRADIENT }
+enum class AppFontFamily { DEFAULT, SERIF, MONOSPACE }
+enum class HomeLayoutStyle { LISTA, GRELHA }
+enum class MusicCardStyle { COMPACTO, CARTAO }
 
 data class AccentOption(val name: String, val hex: Long)
 
@@ -23,6 +26,14 @@ val ACCENT_OPTIONS = listOf(
     AccentOption("Verde", 0xFF33C77E),
     AccentOption("Rosa", 0xFFFF4FA0),
     AccentOption("Laranja", 0xFFFF8A3D)
+)
+
+val WALLPAPER_OPTIONS = listOf(
+    AccentOption("Preto", 0xFF0E0E12),
+    AccentOption("Azul-marinho", 0xFF0B1220),
+    AccentOption("Grafite", 0xFF16161C),
+    AccentOption("Vinho", 0xFF1A0E14),
+    AccentOption("Verde-escuro", 0xFF0E1A14)
 )
 
 /**
@@ -36,6 +47,10 @@ class SettingsRepository(private val context: Context) {
         val EXCLUDED_AUDIO_BUCKETS = stringSetPreferencesKey("excluded_audio_buckets")
         val PLAYER_SKIN = stringPreferencesKey("player_skin")
         val ACCENT_COLOR_HEX = stringPreferencesKey("accent_color_hex")
+        val WALLPAPER_COLOR_HEX = stringPreferencesKey("wallpaper_color_hex")
+        val FONT_FAMILY = stringPreferencesKey("font_family")
+        val HOME_LAYOUT_STYLE = stringPreferencesKey("home_layout_style")
+        val MUSIC_CARD_STYLE = stringPreferencesKey("music_card_style")
         val PAUSE_ON_VOLUME_ZERO = booleanPreferencesKey("pause_on_volume_zero")
         val PAUSE_ON_BLUETOOTH_DISCONNECT = booleanPreferencesKey("pause_on_bluetooth_disconnect")
         val HISTORY_ENABLED = booleanPreferencesKey("history_enabled")
@@ -70,6 +85,34 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setAccentColor(hex: Long) {
         context.dataStore.edit { it[Keys.ACCENT_COLOR_HEX] = hex.toString() }
+    }
+
+    val wallpaperColorHex: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[Keys.WALLPAPER_COLOR_HEX]?.toLongOrNull() ?: WALLPAPER_OPTIONS.first().hex
+    }
+
+    suspend fun setWallpaperColor(hex: Long) {
+        context.dataStore.edit { it[Keys.WALLPAPER_COLOR_HEX] = hex.toString() }
+    }
+
+    val fontFamily: Flow<AppFontFamily> = context.dataStore.data.map { prefs ->
+        when (prefs[Keys.FONT_FAMILY]) {
+            "SERIF" -> AppFontFamily.SERIF
+            "MONOSPACE" -> AppFontFamily.MONOSPACE
+            else -> AppFontFamily.DEFAULT
+        }
+    }
+
+    suspend fun setFontFamily(font: AppFontFamily) {
+        context.dataStore.edit { it[Keys.FONT_FAMILY] = font.name }
+    }
+
+    val homeLayoutStyle: Flow<HomeLayoutStyle> = context.dataStore.data.map { prefs ->
+        if (prefs[Keys.HOME_LAYOUT_STYLE] == "GRELHA") HomeLayoutStyle.GRELHA else HomeLayoutStyle.LISTA
+    }
+
+    suspend fun setHomeLayoutStyle(style: HomeLayoutStyle) {
+        context.dataStore.edit { it[Keys.HOME_LAYOUT_STYLE] = style.name }
     }
 
     val rememberLastSection: Flow<Boolean> = context.dataStore.data.map { it[Keys.REMEMBER_LAST_SECTION] ?: true }
@@ -115,6 +158,14 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setPlayerSkin(skin: PlayerSkin) {
         context.dataStore.edit { it[Keys.PLAYER_SKIN] = skin.name }
+    }
+
+    val musicCardStyle: Flow<MusicCardStyle> = context.dataStore.data.map { prefs ->
+        if (prefs[Keys.MUSIC_CARD_STYLE] == "CARTAO") MusicCardStyle.CARTAO else MusicCardStyle.COMPACTO
+    }
+
+    suspend fun setMusicCardStyle(style: MusicCardStyle) {
+        context.dataStore.edit { it[Keys.MUSIC_CARD_STYLE] = style.name }
     }
 
     val pauseOnVolumeZero: Flow<Boolean> = context.dataStore.data.map { it[Keys.PAUSE_ON_VOLUME_ZERO] ?: true }

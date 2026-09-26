@@ -22,10 +22,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jay.nyxplay.data.AppFontFamily
 import com.jay.nyxplay.data.MediaEntity
 import com.jay.nyxplay.data.MediaType
 import com.jay.nyxplay.data.PlaylistEntity
@@ -48,7 +50,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settingsViewModel: com.jay.nyxplay.ui.settings.SettingsViewModel = viewModel()
             val accentHex by settingsViewModel.accentColorHex.collectAsState()
-            NyxPlayTheme(accentColor = Color(accentHex)) {
+            val wallpaperHex by settingsViewModel.wallpaperColorHex.collectAsState()
+            val fontChoice by settingsViewModel.fontFamily.collectAsState()
+
+            NyxPlayTheme(
+                accentColor = Color(accentHex),
+                backgroundColor = Color(wallpaperHex),
+                fontChoice = fontChoice
+            ) {
                 var showSplash by remember { mutableStateOf(true) }
                 var minTimeElapsed by remember { mutableStateOf(false) }
 
@@ -93,13 +102,41 @@ private fun installCrashHandler(context: android.content.Context) {
 }
 
 @Composable
-fun NyxPlayTheme(accentColor: Color = Color(0xFF7C5CFF), content: @Composable () -> Unit) {
+fun NyxPlayTheme(
+    accentColor: Color = Color(0xFF7C5CFF),
+    backgroundColor: Color = Color(0xFF0E0E12),
+    fontChoice: AppFontFamily = AppFontFamily.DEFAULT,
+    content: @Composable () -> Unit
+) {
     val colorScheme = darkColorScheme(
         primary = accentColor,
-        background = Color(0xFF0E0E12),
-        surface = Color(0xFF16161C)
+        background = backgroundColor,
+        surface = backgroundColor
     )
-    MaterialTheme(colorScheme = colorScheme, content = content)
+    val fontFamily = when (fontChoice) {
+        AppFontFamily.DEFAULT -> FontFamily.Default
+        AppFontFamily.SERIF -> FontFamily.Serif
+        AppFontFamily.MONOSPACE -> FontFamily.Monospace
+    }
+    val baseTypography = Typography()
+    val typography = Typography(
+        displayLarge = baseTypography.displayLarge.copy(fontFamily = fontFamily),
+        displayMedium = baseTypography.displayMedium.copy(fontFamily = fontFamily),
+        displaySmall = baseTypography.displaySmall.copy(fontFamily = fontFamily),
+        headlineLarge = baseTypography.headlineLarge.copy(fontFamily = fontFamily),
+        headlineMedium = baseTypography.headlineMedium.copy(fontFamily = fontFamily),
+        headlineSmall = baseTypography.headlineSmall.copy(fontFamily = fontFamily),
+        titleLarge = baseTypography.titleLarge.copy(fontFamily = fontFamily),
+        titleMedium = baseTypography.titleMedium.copy(fontFamily = fontFamily),
+        titleSmall = baseTypography.titleSmall.copy(fontFamily = fontFamily),
+        bodyLarge = baseTypography.bodyLarge.copy(fontFamily = fontFamily),
+        bodyMedium = baseTypography.bodyMedium.copy(fontFamily = fontFamily),
+        bodySmall = baseTypography.bodySmall.copy(fontFamily = fontFamily),
+        labelLarge = baseTypography.labelLarge.copy(fontFamily = fontFamily),
+        labelMedium = baseTypography.labelMedium.copy(fontFamily = fontFamily),
+        labelSmall = baseTypography.labelSmall.copy(fontFamily = fontFamily)
+    )
+    MaterialTheme(colorScheme = colorScheme, typography = typography, content = content)
 }
 
 private enum class NyxSection { VIDEOS, MUSICA }
@@ -141,9 +178,6 @@ fun NyxPlayApp(viewModel: LibraryViewModel = viewModel()) {
     val playerUi by playerViewModel.state.collectAsState()
     var showFullPlayer by remember { mutableStateOf(false) }
 
-    // Corrige o "re-scan a cada abertura": só pede/relança permissão se
-    // ainda não estava concedida. Se já estava, os dados em cache do
-    // Room aparecem de imediato e um scan silencioso corre uma vez.
     val permissionsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->

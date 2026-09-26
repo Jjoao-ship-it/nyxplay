@@ -39,8 +39,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jay.nyxplay.data.ACCENT_OPTIONS
+import com.jay.nyxplay.data.WALLPAPER_OPTIONS
+import com.jay.nyxplay.data.AppFontFamily
+import com.jay.nyxplay.data.HomeLayoutStyle
 import com.jay.nyxplay.data.MediaEntity
 import com.jay.nyxplay.data.MediaType
+import com.jay.nyxplay.data.MusicCardStyle
 import com.jay.nyxplay.data.PlayerSkin
 
 @Composable
@@ -73,7 +77,7 @@ fun SettingsScreen(
         } else if (contextType == MediaType.VIDEO) {
             VideoIndividualSettingsTab(videos, viewModel, onOpenPlaylists)
         } else {
-            AudioIndividualSettingsTab(videos, viewModel, onOpenPlaylists)
+            AudioIndividualSettingsTab(viewModel, onOpenPlaylists)
         }
     }
 }
@@ -81,30 +85,39 @@ fun SettingsScreen(
 @Composable
 private fun GeneralSettingsTab(viewModel: SettingsViewModel) {
     val accentHex by viewModel.accentColorHex.collectAsState()
+    val wallpaperHex by viewModel.wallpaperColorHex.collectAsState()
+    val font by viewModel.fontFamily.collectAsState()
+    val homeLayout by viewModel.homeLayoutStyle.collectAsState()
     val rememberSection by viewModel.rememberLastSection.collectAsState()
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item { SettingsSectionTitle("Cor de destaque") }
         item {
-            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                ACCENT_OPTIONS.forEach { option ->
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(end = 16.dp).clickable { viewModel.setAccentColor(option.hex) }
-                    ) {
-                        androidx.compose.foundation.layout.Box(
-                            modifier = Modifier.size(40.dp).clip(CircleShape)
-                                .background(Color(option.hex)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (accentHex == option.hex) {
-                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
-                            }
-                        }
-                        Text(option.name, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-                    }
-                }
-            }
+            ColorSwatchRow(ACCENT_OPTIONS, accentHex) { viewModel.setAccentColor(it) }
+        }
+
+        item { SettingsSectionTitle("Cor do papel de parede") }
+        item {
+            ColorSwatchRow(WALLPAPER_OPTIONS, wallpaperHex) { viewModel.setWallpaperColor(it) }
+        }
+
+        item { SettingsSectionTitle("Tipo de letra") }
+        item {
+            SettingsRadioRow("Padrão", font == AppFontFamily.DEFAULT) { viewModel.setFontFamily(AppFontFamily.DEFAULT) }
+        }
+        item {
+            SettingsRadioRow("Serifada", font == AppFontFamily.SERIF) { viewModel.setFontFamily(AppFontFamily.SERIF) }
+        }
+        item {
+            SettingsRadioRow("Monoespaçada", font == AppFontFamily.MONOSPACE) { viewModel.setFontFamily(AppFontFamily.MONOSPACE) }
+        }
+
+        item { SettingsSectionTitle("Layout do Início") }
+        item {
+            SettingsRadioRow("Lista horizontal", homeLayout == HomeLayoutStyle.LISTA) { viewModel.setHomeLayoutStyle(HomeLayoutStyle.LISTA) }
+        }
+        item {
+            SettingsRadioRow("Grelha", homeLayout == HomeLayoutStyle.GRELHA) { viewModel.setHomeLayoutStyle(HomeLayoutStyle.GRELHA) }
         }
 
         item { SettingsSectionTitle("Comportamento") }
@@ -115,6 +128,28 @@ private fun GeneralSettingsTab(viewModel: SettingsViewModel) {
                 checked = rememberSection,
                 onCheckedChange = { viewModel.setRememberLastSection(it) }
             )
+        }
+    }
+}
+
+@Composable
+private fun ColorSwatchRow(options: List<com.jay.nyxplay.data.AccentOption>, selectedHex: Long, onSelect: (Long) -> Unit) {
+    Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        options.forEach { option ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(end = 16.dp).clickable { onSelect(option.hex) }
+            ) {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(option.hex)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selectedHex == option.hex) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
+                    }
+                }
+                Text(option.name, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+            }
         }
     }
 }
@@ -138,16 +173,12 @@ private fun VideoIndividualSettingsTab(videos: List<MediaEntity>, viewModel: Set
 }
 
 @Composable
-private fun AudioIndividualSettingsTab(videos: List<MediaEntity>, viewModel: SettingsViewModel, onOpenPlaylists: () -> Unit) {
-    val excludedBuckets by viewModel.excludedAudioBuckets.collectAsState()
+private fun AudioIndividualSettingsTab(viewModel: SettingsViewModel, onOpenPlaylists: () -> Unit) {
     val playerSkin by viewModel.playerSkin.collectAsState()
+    val cardStyle by viewModel.musicCardStyle.collectAsState()
     val pauseVolumeZero by viewModel.pauseOnVolumeZero.collectAsState()
     val pauseBluetooth by viewModel.pauseOnBluetoothDisconnect.collectAsState()
     val historyEnabled by viewModel.historyEnabled.collectAsState()
-
-    // Nota: origens de áudio vêm do MediaScanner (bucketName), tal como vídeo —
-    // este ecrã só lista o que já está indexado, por isso pode estar vazio
-    // até um scan de áudio ter corrido pelo menos uma vez.
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item { SettingsLinkRow("Gerir playlists de música", onOpenPlaylists) }
@@ -161,6 +192,18 @@ private fun AudioIndividualSettingsTab(videos: List<MediaEntity>, viewModel: Set
         item {
             SettingsRadioRow("Gradient — capa desfocada em ecrã inteiro", playerSkin == PlayerSkin.GRADIENT) {
                 viewModel.setPlayerSkin(PlayerSkin.GRADIENT)
+            }
+        }
+
+        item { SettingsSectionTitle("Tipo de cartão da lista de músicas") }
+        item {
+            SettingsRadioRow("Compacto — linha fina", cardStyle == MusicCardStyle.COMPACTO) {
+                viewModel.setMusicCardStyle(MusicCardStyle.COMPACTO)
+            }
+        }
+        item {
+            SettingsRadioRow("Cartão — capa maior, mais espaçado", cardStyle == MusicCardStyle.CARTAO) {
+                viewModel.setMusicCardStyle(MusicCardStyle.CARTAO)
             }
         }
 

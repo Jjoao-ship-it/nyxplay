@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,21 +44,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jay.nyxplay.data.MediaEntity
 import com.jay.nyxplay.data.MediaType
+import com.jay.nyxplay.data.MusicCardStyle
 import com.jay.nyxplay.ui.MediaThumbnail
 import com.jay.nyxplay.ui.playlists.AddToPlaylistDialog
+import com.jay.nyxplay.ui.settings.SettingsViewModel
 
 @Composable
 fun MusicLibraryScreen(
     audios: List<MediaEntity>,
     onSongClick: (Int) -> Unit,
     onShufflePlay: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    settingsViewModel: SettingsViewModel = viewModel()
 ) {
     var query by remember { mutableStateOf("") }
     var artistFilter by remember { mutableStateOf<String?>(null) }
     var albumFilter by remember { mutableStateOf<String?>(null) }
+    var addToPlaylistUid by remember { mutableStateOf<String?>(null) }
+    val cardStyle by settingsViewModel.musicCardStyle.collectAsState()
 
     val topArtists = remember(audios) {
         audios.groupBy { it.artist?.takeIf { a -> a.isNotBlank() } ?: "Desconhecido" }
@@ -71,12 +79,6 @@ fun MusicLibraryScreen(
             .entries.sortedByDescending { it.value }
             .take(8)
     }
-
-    val recentlyAdded = remember(audios) {
-        audios.sortedByDescending { it.dateAdded }.take(10)
-    }
-
-    var addToPlaylistUid by remember { mutableStateOf<String?>(null) }
 
     val filtered = remember(audios, query, artistFilter, albumFilter) {
         audios.filter { a ->
@@ -129,43 +131,12 @@ fun MusicLibraryScreen(
         }
 
         if (artistFilter == null && albumFilter == null && query.isBlank()) {
-            if (recentlyAdded.isNotEmpty()) {
-                item { SectionLabel("Recentemente adicionadas") }
-                item {
-                    LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)) {
-                        items(recentlyAdded, key = { it.uid }) { audio ->
-                            Column(
-                                modifier = Modifier
-                                    .padding(end = 14.dp)
-                                    .clickable { onSongClick(audios.indexOf(audio)) }
-                            ) {
-                                MediaThumbnail(
-                                    uri = audio.uri,
-                                    type = MediaType.AUDIO,
-                                    modifier = Modifier.size(96.dp).clip(RoundedCornerShape(10.dp))
-                                )
-                                Text(
-                                    audio.displayName,
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                    modifier = Modifier.width(96.dp).padding(top = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
             if (topArtists.isNotEmpty()) {
                 item { SectionLabel("Top artistas") }
                 item {
-                    LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)) {
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp)) {
                         items(topArtists) { (artist, count) ->
-                            ArtistCircle(
-                                name = artist,
-                                count = count,
-                                onClick = { artistFilter = artist }
-                            )
+                            ArtistCircle(name = artist, count = count, onClick = { artistFilter = artist })
                         }
                     }
                 }
@@ -174,7 +145,7 @@ fun MusicLibraryScreen(
             if (topAlbums.isNotEmpty()) {
                 item { SectionLabel("Top álbuns") }
                 item {
-                    LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)) {
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp)) {
                         items(topAlbums) { (album, count) ->
                             AlbumCard(
                                 albumName = album,
@@ -216,50 +187,63 @@ fun MusicLibraryScreen(
 
         itemsIndexed(filtered, key = { _, a -> a.uid }) { _, audio ->
             val originalIndex = audios.indexOf(audio)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSongClick(originalIndex) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                MediaThumbnail(
-                    uri = audio.uri,
-                    type = MediaType.AUDIO,
+            if (cardStyle == MusicCardStyle.CARTAO) {
+                Row(
                     modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF232330))
-                )
-                Spacer(modifier = Modifier.width(14.dp))
-                Column {
-                    Text(
-                        audio.displayName,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF1A1A22))
+                        .clickable { onSongClick(originalIndex) }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    MediaThumbnail(
+                        uri = audio.uri, type = MediaType.AUDIO,
+                        modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF232330))
                     )
-                    Text(
-                        audio.artist?.takeIf { it.isNotBlank() } ?: "Artista desconhecido",
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                        fontSize = 13.sp,
-                        maxLines = 1
-                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(audio.displayName, color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(
+                            audio.artist?.takeIf { it.isNotBlank() } ?: "Artista desconhecido",
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f), fontSize = 13.sp, maxLines = 1
+                        )
+                    }
+                    IconButton(onClick = { addToPlaylistUid = audio.uid }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Mais opções")
+                    }
                 }
-                IconButton(onClick = { addToPlaylistUid = audio.uid }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Mais opções")
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSongClick(originalIndex) }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    MediaThumbnail(
+                        uri = audio.uri, type = MediaType.AUDIO,
+                        modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF232330))
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(audio.displayName, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(
+                            audio.artist?.takeIf { it.isNotBlank() } ?: "Artista desconhecido",
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f), fontSize = 13.sp, maxLines = 1
+                        )
+                    }
+                    IconButton(onClick = { addToPlaylistUid = audio.uid }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Mais opções")
+                    }
                 }
             }
         }
     }
 
     addToPlaylistUid?.let { uid ->
-        AddToPlaylistDialog(
-            type = MediaType.AUDIO,
-            mediaUid = uid,
-            onDismiss = { addToPlaylistUid = null }
-        )
+        AddToPlaylistDialog(type = MediaType.AUDIO, mediaUid = uid, onDismiss = { addToPlaylistUid = null })
     }
 }
 
@@ -277,70 +261,34 @@ private fun SectionLabel(text: String) {
 @Composable
 private fun ArtistCircle(name: String, count: Int, onClick: () -> Unit) {
     Column(
-        modifier = Modifier
-            .padding(end = 14.dp)
-            .clickable(onClick = onClick),
+        modifier = Modifier.padding(end = 14.dp).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(Color(0xFF2A2A38)),
+            modifier = Modifier.size(72.dp).clip(CircleShape).background(Color(0xFF2A2A38)),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Default.Person, contentDescription = null, tint = Color.White.copy(alpha = 0.6f))
         }
         Spacer(modifier = Modifier.padding(top = 4.dp))
-        Text(
-            name,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontSize = 12.sp,
-            maxLines = 1,
-            modifier = Modifier.width(72.dp)
-        )
-        Text(
-            "$count músicas",
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-            fontSize = 10.sp
-        )
+        Text(name, color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, maxLines = 1, modifier = Modifier.width(72.dp))
+        Text("$count músicas", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f), fontSize = 10.sp)
     }
 }
 
 @Composable
 private fun AlbumCard(albumName: String, count: Int, sampleUri: String?, onClick: () -> Unit) {
     Column(
-        modifier = Modifier
-            .padding(end = 14.dp)
-            .clickable(onClick = onClick),
+        modifier = Modifier.padding(end = 14.dp).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (sampleUri != null) {
-            MediaThumbnail(
-                uri = sampleUri,
-                type = MediaType.AUDIO,
-                modifier = Modifier.size(96.dp).clip(RoundedCornerShape(10.dp))
-            )
+            MediaThumbnail(uri = sampleUri, type = MediaType.AUDIO, modifier = Modifier.size(96.dp).clip(RoundedCornerShape(10.dp)))
         } else {
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF2A2A38))
-            )
+            Box(modifier = Modifier.size(96.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF2A2A38)))
         }
         Spacer(modifier = Modifier.padding(top = 4.dp))
-        Text(
-            albumName,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontSize = 12.sp,
-            maxLines = 1,
-            modifier = Modifier.width(96.dp)
-        )
-        Text(
-            "$count músicas",
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-            fontSize = 10.sp
-        )
+        Text(albumName, color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, maxLines = 1, modifier = Modifier.width(96.dp))
+        Text("$count músicas", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f), fontSize = 10.sp)
     }
 }

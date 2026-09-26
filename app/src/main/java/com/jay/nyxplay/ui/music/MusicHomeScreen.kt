@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,9 +41,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jay.nyxplay.data.HomeLayoutStyle
 import com.jay.nyxplay.data.MediaEntity
 import com.jay.nyxplay.data.MediaType
 import com.jay.nyxplay.ui.MediaThumbnail
+import com.jay.nyxplay.ui.settings.SettingsViewModel
 
 private enum class QuickList { HISTORICO, RECENTES, MAIS_TOCADAS }
 
@@ -50,9 +54,11 @@ private enum class QuickList { HISTORICO, RECENTES, MAIS_TOCADAS }
 fun MusicHomeScreen(
     audios: List<MediaEntity>,
     onSongClick: (List<MediaEntity>, Int) -> Unit,
-    onShufflePlay: () -> Unit
+    onShufflePlay: () -> Unit,
+    settingsViewModel: SettingsViewModel = viewModel()
 ) {
     var openList by remember { mutableStateOf<QuickList?>(null) }
+    val layoutStyle by settingsViewModel.homeLayoutStyle.collectAsState()
 
     val historico = remember(audios) { audios.filter { it.lastPlayedAt > 0 }.sortedByDescending { it.lastPlayedAt } }
     val recentes = remember(audios) { audios.sortedByDescending { it.dateAdded } }
@@ -100,42 +106,30 @@ fun MusicHomeScreen(
 
             if (sugestoes.isNotEmpty()) {
                 item { SectionLabel("Sugestões") }
-                item {
-                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp)) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .padding(end = 12.dp)
-                                    .size(width = 130.dp, height = 150.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(
-                                        Brush.linearGradient(
-                                            listOf(MaterialTheme.colorScheme.primary, Color(0xFF2A1E5C))
-                                        )
-                                    )
-                                    .clickable { onSongClick(sugestoes, 0) }
-                                    .padding(14.dp)
-                            ) {
-                                Text(
-                                    "Novo mix\nde música",
-                                    color = Color.White,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.align(Alignment.BottomStart)
-                                )
+                if (layoutStyle == HomeLayoutStyle.LISTA) {
+                    item {
+                        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp)) {
+                            item {
+                                NovoMixTile("Novo mix\nde música") { onSongClick(sugestoes, 0) }
+                            }
+                            items(sugestoes.drop(1), key = { it.uid }) { song ->
+                                SugestaoThumb(song) { onSongClick(sugestoes, sugestoes.indexOf(song)) }
                             }
                         }
-                        items(sugestoes.drop(1), key = { it.uid }) { song ->
-                            Column(
-                                modifier = Modifier
-                                    .padding(end = 12.dp)
-                                    .clickable { onSongClick(sugestoes, sugestoes.indexOf(song)) }
-                            ) {
-                                MediaThumbnail(
-                                    uri = song.uri, type = MediaType.AUDIO,
-                                    modifier = Modifier.size(110.dp).clip(RoundedCornerShape(10.dp))
-                                )
-                                Text(song.displayName, fontSize = 12.sp, maxLines = 1, modifier = Modifier.width(110.dp).padding(top = 4.dp))
+                    }
+                } else {
+                    item {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            sugestoes.chunked(3).forEach { row ->
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    row.forEach { song ->
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            SugestaoThumb(song, fillWidth = true) { onSongClick(sugestoes, sugestoes.indexOf(song)) }
+                                        }
+                                    }
+                                    repeat(3 - row.size) { Box(modifier = Modifier.weight(1f)) }
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
                             }
                         }
                     }
@@ -151,10 +145,7 @@ fun MusicHomeScreen(
                                 modifier = Modifier.padding(end = 12.dp).clickable { onSongClick(maisTocadas, maisTocadas.indexOf(song)) },
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                MediaThumbnail(
-                                    uri = song.uri, type = MediaType.AUDIO,
-                                    modifier = Modifier.size(84.dp).clip(CircleShape)
-                                )
+                                MediaThumbnail(uri = song.uri, type = MediaType.AUDIO, modifier = Modifier.size(84.dp).clip(CircleShape))
                                 Text(song.displayName, fontSize = 11.sp, maxLines = 1, modifier = Modifier.width(84.dp).padding(top = 4.dp))
                             }
                         }
@@ -167,10 +158,7 @@ fun MusicHomeScreen(
                 item {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp)) {
                         items(topArtistasPorReproducoes) { (artist, _) ->
-                            Column(
-                                modifier = Modifier.padding(end = 14.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
+                            Column(modifier = Modifier.padding(end = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Box(
                                     modifier = Modifier.size(72.dp).clip(CircleShape).background(Color(0xFF2A2A38)),
                                     contentAlignment = Alignment.Center
@@ -186,6 +174,33 @@ fun MusicHomeScreen(
 
             item { Spacer(modifier = Modifier.height(24.dp)) }
         }
+    }
+}
+
+@Composable
+private fun NovoMixTile(label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .padding(end = 12.dp)
+            .size(width = 130.dp, height = 150.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, Color(0xFF2A1E5C))))
+            .clickable(onClick = onClick)
+            .padding(14.dp)
+    ) {
+        Text(label, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart))
+    }
+}
+
+@Composable
+private fun SugestaoThumb(song: MediaEntity, fillWidth: Boolean = false, onClick: () -> Unit) {
+    Column(modifier = Modifier.padding(end = if (fillWidth) 0.dp else 12.dp).clickable(onClick = onClick)) {
+        MediaThumbnail(
+            uri = song.uri, type = MediaType.AUDIO,
+            modifier = if (fillWidth) Modifier.fillMaxWidth().height(110.dp).clip(RoundedCornerShape(10.dp))
+            else Modifier.size(110.dp).clip(RoundedCornerShape(10.dp))
+        )
+        Text(song.displayName, fontSize = 12.sp, maxLines = 1, modifier = Modifier.width(if (fillWidth) 110.dp else 110.dp).padding(top = 4.dp))
     }
 }
 
