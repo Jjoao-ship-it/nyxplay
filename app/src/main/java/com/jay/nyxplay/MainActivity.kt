@@ -136,7 +136,17 @@ fun NyxPlayTheme(
         labelMedium = baseTypography.labelMedium.copy(fontFamily = fontFamily),
         labelSmall = baseTypography.labelSmall.copy(fontFamily = fontFamily)
     )
-    MaterialTheme(colorScheme = colorScheme, typography = typography, content = content)
+    MaterialTheme(colorScheme = colorScheme, typography = typography) {
+        // Surface define LocalContentColor para toda a árvore — sem isto,
+        // qualquer Text sem cor explícita fora de um Scaffold fica preto
+        // (cor padrão do Compose) e invisível sobre o nosso fundo escuro.
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            content()
+        }
+    }
 }
 
 private enum class NyxSection { VIDEOS, MUSICA }
