@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,10 +41,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jay.nyxplay.data.HomeLayoutStyle
 import com.jay.nyxplay.data.MediaEntity
 import com.jay.nyxplay.data.MediaType
 import com.jay.nyxplay.ui.MediaThumbnail
 import com.jay.nyxplay.ui.music.SimpleSongListScreen
+import com.jay.nyxplay.ui.settings.SettingsViewModel
 
 private enum class QuickList { HISTORICO, RECENTES, MAIS_ASSISTIDOS }
 
@@ -51,9 +55,11 @@ private enum class QuickList { HISTORICO, RECENTES, MAIS_ASSISTIDOS }
 fun VideoHomeScreen(
     videos: List<MediaEntity>,
     onVideoClick: (List<MediaEntity>, Int) -> Unit,
-    onShufflePlay: () -> Unit
+    onShufflePlay: () -> Unit,
+    settingsViewModel: SettingsViewModel = viewModel()
 ) {
     var openList by remember { mutableStateOf<QuickList?>(null) }
+    val layoutStyle by settingsViewModel.homeLayoutStyle.collectAsState()
 
     val historico = remember(videos) { videos.filter { it.lastPlayedAt > 0 }.sortedByDescending { it.lastPlayedAt } }
     val recentes = remember(videos) { videos.sortedByDescending { it.dateAdded } }
@@ -101,41 +107,40 @@ fun VideoHomeScreen(
 
             if (sugestoes.isNotEmpty()) {
                 item { SectionLabel("Sugestões") }
-                item {
-                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp)) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .padding(end = 12.dp)
-                                    .size(width = 130.dp, height = 150.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(
-                                        Brush.linearGradient(
-                                            listOf(MaterialTheme.colorScheme.primary, Color(0xFF2A1E5C))
-                                        )
+                if (layoutStyle == HomeLayoutStyle.LISTA) {
+                    item {
+                        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp)) {
+                            item { NovoMixTile("Novo mix\nde vídeo") { onVideoClick(sugestoes, 0) } }
+                            items(sugestoes.drop(1), key = { it.uid }) { video ->
+                                Column(
+                                    modifier = Modifier.padding(end = 12.dp).clickable { onVideoClick(sugestoes, sugestoes.indexOf(video)) }
+                                ) {
+                                    MediaThumbnail(
+                                        uri = video.uri, type = MediaType.VIDEO,
+                                        modifier = Modifier.size(width = 100.dp, height = 140.dp).clip(RoundedCornerShape(10.dp))
                                     )
-                                    .clickable { onVideoClick(sugestoes, 0) }
-                                    .padding(14.dp)
-                            ) {
-                                Text(
-                                    "Novo mix\nde vídeo",
-                                    color = Color.White,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.align(Alignment.BottomStart)
-                                )
+                                }
                             }
                         }
-                        items(sugestoes.drop(1), key = { it.uid }) { video ->
-                            Column(
-                                modifier = Modifier
-                                    .padding(end = 12.dp)
-                                    .clickable { onVideoClick(sugestoes, sugestoes.indexOf(video)) }
-                            ) {
-                                MediaThumbnail(
-                                    uri = video.uri, type = MediaType.VIDEO,
-                                    modifier = Modifier.size(width = 100.dp, height = 140.dp).clip(RoundedCornerShape(10.dp))
-                                )
+                    }
+                } else {
+                    item {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            sugestoes.chunked(3).forEach { row ->
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    row.forEach { video ->
+                                        MediaThumbnail(
+                                            uri = video.uri, type = MediaType.VIDEO,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(140.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .clickable { onVideoClick(sugestoes, sugestoes.indexOf(video)) }
+                                        )
+                                    }
+                                    repeat(3 - row.size) { Box(modifier = Modifier.weight(1f)) }
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
                             }
                         }
                     }
@@ -151,10 +156,7 @@ fun VideoHomeScreen(
                                 modifier = Modifier.padding(end = 12.dp).clickable { onVideoClick(maisAssistidos, maisAssistidos.indexOf(video)) },
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                MediaThumbnail(
-                                    uri = video.uri, type = MediaType.VIDEO,
-                                    modifier = Modifier.size(84.dp).clip(CircleShape)
-                                )
+                                MediaThumbnail(uri = video.uri, type = MediaType.VIDEO, modifier = Modifier.size(84.dp).clip(CircleShape))
                                 Text(video.displayName, fontSize = 11.sp, maxLines = 1, modifier = Modifier.width(84.dp).padding(top = 4.dp))
                             }
                         }
@@ -167,15 +169,9 @@ fun VideoHomeScreen(
                 item {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp)) {
                         items(topAlbunsPorReproducoes) { (name, _, coverUri) ->
-                            Column(
-                                modifier = Modifier.padding(end = 14.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
+                            Column(modifier = Modifier.padding(end = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 if (coverUri != null) {
-                                    MediaThumbnail(
-                                        uri = coverUri, type = MediaType.VIDEO,
-                                        modifier = Modifier.size(72.dp).clip(CircleShape)
-                                    )
+                                    MediaThumbnail(uri = coverUri, type = MediaType.VIDEO, modifier = Modifier.size(72.dp).clip(CircleShape))
                                 } else {
                                     Box(
                                         modifier = Modifier.size(72.dp).clip(CircleShape).background(Color(0xFF2A2A38)),
@@ -191,6 +187,21 @@ fun VideoHomeScreen(
 
             item { Spacer(modifier = Modifier.height(24.dp)) }
         }
+    }
+}
+
+@Composable
+private fun NovoMixTile(label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .padding(end = 12.dp)
+            .size(width = 130.dp, height = 150.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, Color(0xFF2A1E5C))))
+            .clickable(onClick = onClick)
+            .padding(14.dp)
+    ) {
+        Text(label, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart))
     }
 }
 
